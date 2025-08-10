@@ -108,11 +108,11 @@
     .floating-audio { position: fixed; inset-inline-start: 16px; inset-block-end: 16px; z-index: 1000; display:none; }
     body.screen .floating-audio.show { display:block; }
   </style>
-  <!-- Firebase (Compat) - تُحمّل فقط عند تفعيل المزامنة -->
-  <script id="fb-app" defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script id="fb-auth" defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script id="fb-db" defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script id="fb-store" defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+  <!-- Firebase (Compat) -->
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 </head>
 <body>
   <header>
@@ -141,7 +141,6 @@
       <div class="countdown" id="countdown">00:00:00</div>
       <div class="phase" id="phase">حتى الأذان</div>
       <div class="progress" aria-hidden="true"><div class="bar" id="bar"></div></div>
-
       <div class="grid" id="todayGrid"></div>
     </section>
 
@@ -157,7 +156,7 @@
             <div>أسقط الملف هنا أو اختره</div>
             <input type="file" id="scheduleFile" accept=".csv,.json" />
           </div>
-          <div class="small">رؤوس CSV: <code>date,fajr,dhuhr,asr,maghrib,isha</code> أو بالعربية <code>التاريخ,الفجر,الظهر,العصر,المغرب,العشاء</code> · الوقت 12/24 · التاريخ: <code>YYYY-MM-DD</code>.</div>
+          <div class="small">رؤوس CSV: <code>date,fajr,dhuhr,asr,maghrib,isha</code> أو <code>التاريخ,الفجر,الظهر,العصر,المغرب,العشاء</code> · التاريخ: <code>YYYY-MM-DD</code>.</div>
         </div>
         <div class="field">
           <label>مدة الإقامة (بالدقائق بعد الأذان)</label>
@@ -301,6 +300,8 @@
         <button id="exportWithMedia" class="ghost">تصدير مع الوسائط</button>
         <button id="importData" class="ghost">استيراد نسخة احتياطية</button>
         <button id="resetAll" class="danger">إعادة الضبط الكلي</button>
+        <button id="pushAll" class="ghost">إرسال الكل للسحابة الآن</button>
+        <button id="pullAll" class="ghost">سحب من السحابة</button>
       </div>
 
       <details>
@@ -351,6 +352,7 @@
   const qs = new URLSearchParams(location.search);
   const SCREEN = qs.get('screen') === '1' || qs.has('screen');
 
+  // تاريخ/وقت الآن للنص العلوي
   function nowString(){
     const d = new Date();
     const yyyy = d.getFullYear(); const mm = pad(d.getMonth()+1); const dd = pad(d.getDate());
@@ -359,6 +361,7 @@
     return `الآن: ${yyyy}-${mm}-${dd} ${h}:${mi}:${ss} ${ap}`;
   }
 
+  // تحليل وقت (يدعم 12/24 و ص/م)
   function parseTimeToDate(dateStr, timeStr, tzOffsetMin=0){
     if(!timeStr) return null; let t = (''+timeStr).trim().toUpperCase();
     let is12 = /\bAM\b|\bPM\b|\bص\b|\bم\b/.test(t);
@@ -396,6 +399,28 @@
   async function idbClear(){ const db=await getDB(); return new Promise((res,rej)=>{ const tx=db.transaction('files','readwrite'); tx.objectStore('files').clear(); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
   function dataURLtoBlob(dataURL){ try{ const [meta,b64]=dataURL.split(','); const mime=(meta.match(/data:(.*?);base64/)||[])[1]||'application/octet-stream'; const bin=atob(b64); const len=bin.length; const arr=new Uint8Array(len); for(let i=0;i<len;i++) arr[i]=bin.charCodeAt(i); return new Blob([arr],{type:mime}); }catch(e){ console.warn('dURL->Blob failed',e); return null; } }
   function blobToDataURL(blob){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=()=>rej(fr.error); fr.readAsDataURL(blob); }); }
+
+  // ======= Sanitizers =======
+  const INVALID_KEY_CHARS = /[.#$/\[\]]/g; // ممنوعة في RTDB
+  function sanitizeDateKey(k){
+    if(!k) return null;
+    const s = String(k).trim();
+    // التقط أول تطابق لتاريخ بصيغة yyyy-mm-dd أو yyyy/mm/dd أو مع مسافات/نقاط
+    const m = s.match(/(\d{4})[\-\/_\.\s](\d{2})[\-\/_\.\s](\d{2})/);
+    if(!m) return null;
+    const y=m[1], mo=m[2], d=m[3];
+    const iso = `${y}-${mo}-${d}`.replace(INVALID_KEY_CHARS,'');
+    return iso;
+  }
+  function sanitizeScheduleForFirebase(sch){
+    const out={};
+    for(const k of Object.keys(sch||{})){
+      const nk = sanitizeDateKey(k);
+      if(!nk) continue; // تجاهل المفاتيح غير الصالحة
+      out[nk] = sch[k];
+    }
+    return out;
+  }
 
   // ======= الحالة =======
   const state = {
@@ -469,12 +494,81 @@
   }
 
   // ======= قراءة CSV/JSON =======
-  function parseCSV(text){ const lines=text.replace(/\r/g,'').trim().split(/\n+/); if(lines.length===0) return {}; const header=lines[0].split(',').map(h=>h.trim().toLowerCase()); const findIdx=(keys)=>{ for(const k of keys){ const i=header.indexOf(k); if(i!==-1) return i; } return -1; };
+  function parseCSV(text){
+    const lines=text.replace(/\r/g,'').trim().split(/\n+/);
+    if(lines.length===0) return {};
+    const header=lines[0].split(',').map(h=>h.trim().toLowerCase());
+    const findIdx=(keys)=>{ for(const k of keys){ const i=header.indexOf(k); if(i!==-1) return i; } return -1; };
     const idx = { date:findIdx(['date','التاريخ']), fajr:findIdx(['fajr','الفجر']), dhuhr:findIdx(['dhuhr','الظهر']), asr:findIdx(['asr','العصر']), maghrib:findIdx(['maghrib','المغرب']), isha:findIdx(['isha','العشاء']) };
-    const out={}; for(let i=1;i<lines.length;i++){ const cols=lines[i].split(',').map(c=>c.trim()); const date=cols[idx.date]; if(!date) continue; out[date] = { Fajr:cols[idx.fajr]||'', Dhuhr:cols[idx.dhuhr]||'', Asr:cols[idx.asr]||'', Maghrib:cols[idx.maghrib]||'', Isha:cols[idx.isha]||'' }; } return out; }
+    const out={};
+    for(let i=1;i<lines.length;i++){
+      const cols=lines[i].split(',').map(c=>c.trim());
+      const rawDate=cols[idx.date];
+      const date=sanitizeDateKey(rawDate);
+      if(!date) continue;
+      out[date] = {
+        Fajr:cols[idx.fajr]||'',
+        Dhuhr:cols[idx.dhuhr]||'',
+        Asr:cols[idx.asr]||'',
+        Maghrib:cols[idx.maghrib]||'',
+        Isha:cols[idx.isha]||''
+      };
+    }
+    return out;
+  }
 
-  function handleScheduleFile(file){ const reader=new FileReader(); reader.onload=()=>{ try{ let data={}; if(file.name.toLowerCase().endsWith('.json')){ const obj=JSON.parse(reader.result); if(Array.isArray(obj)){ for(const r of obj){ if(!r.date && !r['التاريخ']) continue; const date=r.date||r['التاريخ']; data[date] = {Fajr:r.fajr||r['الفجر']||'', Dhuhr:r.dhuhr||r['الظهر']||'', Asr:r.asr||r['العصر']||'', Maghrib:r.maghrib||r['المغرب']||'', Isha:r.isha||r['العشاء']||''}; } } else { for(const k of Object.keys(obj)){ const r=obj[k]; data[k]={Fajr:r.Fajr||r.fajr||r['الفجر']||'', Dhuhr:r.Dhuhr||r.dhuhr||r['الظهر']||'', Asr:r.Asr||r.asr||r['العصر']||'', Maghrib:r.Maghrib||r.maghrib||r['المغرب']||'', Isha:r.Isha||r.isha||r['العشاء']||''}; } } } else { data = parseCSV(reader.result); }
-      state.schedule = {...state.schedule, ...data}; saveLS('ptt_schedule', state.schedule); renderTable(); renderTodayPills(); status('تم تحميل الجدول'); if(state.cloud.enabled) pushToCloud({schedule:true}); }catch(e){ alert('تعذّر تحليل الجدول: '+e.message); } }; reader.readAsText(file); }
+  function handleScheduleFile(file){
+    const reader=new FileReader();
+    reader.onload=()=>{
+      try{
+        let data={};
+        if(file.name.toLowerCase().endsWith('.json')){
+          const obj=JSON.parse(reader.result);
+          if(Array.isArray(obj)){
+            for(const r of obj){
+              const rawDate=r.date||r['التاريخ'];
+              const date=sanitizeDateKey(rawDate);
+              if(!date) continue;
+              data[date] = {
+                Fajr:r.fajr||r['الفجر']||'',
+                Dhuhr:r.dhuhr||r['الظهر']||'',
+                Asr:r.asr||r['العصر']||'',
+                Maghrib:r.maghrib||r['المغرب']||'',
+                Isha:r.isha||r['العشاء']||''
+              };
+            }
+          } else {
+            for(const k of Object.keys(obj)){
+              const date=sanitizeDateKey(k);
+              if(!date) continue;
+              const r=obj[k];
+              data[date]={
+                Fajr:r.Fajr||r.fajr||r['الفجر']||'',
+                Dhuhr:r.Dhuhr||r.dhuhr||r['الظهر']||'',
+                Asr:r.Asr||r.asr||r['العصر']||'',
+                Maghrib:r.Maghrib||r.maghrib||r['المغرب']||'',
+                Isha:r.Isha||r.isha||r['العشاء']||''
+              };
+            }
+          }
+        } else {
+          data = parseCSV(reader.result);
+        }
+        // دمج وحفظ محلي
+        state.schedule = {...sanitizeScheduleForFirebase(state.schedule), ...data};
+        saveLS('ptt_schedule', state.schedule);
+        renderTable(); renderTodayPills();
+        status('تم تحميل الجدول');
+        // دفع للسحابة إن كانت مفعّلة
+        if(state.cloud.enabled) {
+          pushToCloud({schedule:true}).then(ok=>{ if(ok) status('تم إرسال الجدول إلى السحابة'); });
+        }
+      }catch(e){
+        alert('تعذّر تحليل الجدول: '+e.message);
+      }
+    };
+    reader.readAsText(file);
+  }
 
   // ======= الصوت/الثيم =======
   const audioAthan = el('audioAthan'); const audioIqama = el('audioIqama'); let athanUrl=null, iqamaUrl=null;
@@ -483,6 +577,25 @@
   function updateFloatingAudio(){ const fa=el('floatingAudio'); if(!fa) return; if(SCREEN && !state.audioEnabled) fa.classList.add('show'); else fa.classList.remove('show'); }
 
   function applyTheme(){ document.body.style.setProperty('--accent', state.ui.colors.accent); document.body.style.setProperty('--accent-2', state.ui.colors.accent2); document.body.style.setProperty('--bg', state.ui.colors.bg); document.body.style.setProperty('--text', state.ui.colors.text); document.body.style.setProperty('--phase-athan', state.ui.colors.phaseAthan||'#60a5fa'); document.body.style.setProperty('--phase-iqama', state.ui.colors.phaseIqama||'#fbbf24'); document.body.style.setProperty('--phase-grace', state.ui.colors.phaseGrace||'#a8b3cf'); document.body.style.fontFamily = state.ui.font; if(state.ui.googleFontUrl){ el('googleFontLink').href = state.ui.googleFontUrl; } loadBgFromStore(); }
+
+  // ======= URL Params (Cloud Auto-Config) =======
+  function normalizeBucket(b){ if(!b) return b; return /\.firebasestorage\.app$/i.test(b) ? b.replace(/\.firebasestorage\.app$/i, '.appspot.com') : b; }
+  function applyUrlParams(params){
+    try{
+      const p = params || new URLSearchParams(location.search);
+      const c = (p.get('cloud')||p.get('sync')||'').toLowerCase();
+      if(c && c !== '0' && c !== 'false') state.cloud.enabled = true;
+      const room = p.get('room') || p.get('r'); if(room) state.cloud.roomId = room;
+      const cfg = {...(state.cloud.config||{})};
+      const map = { apiKey:['apiKey','fb_apiKey'], authDomain:['authDomain','fb_authDomain'], databaseURL:['databaseURL','fb_databaseURL'], storageBucket:['storageBucket','fb_storageBucket'] };
+      for(const k in map){ for(const key of map[k]){ const v = p.get(key); if(v){ cfg[k]=v; break; } } }
+      if(cfg.storageBucket) cfg.storageBucket = normalizeBucket(cfg.storageBucket);
+      if(Object.keys(cfg).length) state.cloud.config = cfg;
+      const email = p.get('email'); const pass = p.get('password') || p.get('pass');
+      if(email && pass){ state.cloud.email=email; state.cloud.password=pass; }
+      saveLS('ptt_cloud', state.cloud);
+    }catch(e){ console.warn('URL params apply failed', e); }
+  }
 
   // ======= Firebase Sync =======
   let fb={app:null, auth:null, db:null, storage:null, unsub:null};
@@ -499,18 +612,17 @@
     }catch(e){ alert('فشل تهيئة Firebase: '+e.message); cloudStatus('فشل التهيئة'); return false; }
   }
 
-  async function fbLogin(){ try{ if(!initFirebase()) return; const {email,password} = state.cloud; const cred = await fb.auth.signInWithEmailAndPassword(email, password); cloudStatus('متصل ومُسجّل'); state.cloud.signedIn=true; saveLS('ptt_cloud', state.cloud); if(state.cloud.enabled) subscribeCloud(); }catch(e){ alert('تسجيل الدخول فشل: '+e.message); cloudStatus('فشل تسجيل الدخول'); } }
+  async function fbLogin(){ try{ if(!initFirebase()) return; const {email,password} = state.cloud; await fb.auth.signInWithEmailAndPassword(email, password); cloudStatus('متصل ومُسجّل'); state.cloud.signedIn=true; saveLS('ptt_cloud', state.cloud); if(state.cloud.enabled) subscribeCloud(); }catch(e){ alert('تسجيل الدخول فشل: '+e.message); cloudStatus('فشل تسجيل الدخول'); } }
   async function fbLogout(){ try{ if(fb.auth) await fb.auth.signOut(); state.cloud.signedIn=false; saveLS('ptt_cloud', state.cloud); cloudStatus('غير متصل'); if(fb.unsub){ fb.unsub(); fb.unsub=null; } }catch(e){} }
 
   function subscribeCloud(){
     if(!initFirebase()) return; if(fb.unsub){ fb.unsub(); fb.unsub=null; }
     const r=getRefs(); cloudStatus('متصل (استقبال مباشر)');
-    const on = (path, handler)=> fb.db.ref(path).on('value', snap=>{ const val=snap.val(); if(!val) return; handler(val); });
-    on(r.schedule, (v)=>{ state.schedule=v; saveLS('ptt_schedule', v); renderTable(); renderTodayPills(); });
+    const on = (path, handler)=> fb.db.ref(path).on('value', snap=>{ const val=snap.val(); if(val==null) return; handler(val); });
+    on(r.schedule, (v)=>{ state.schedule=sanitizeScheduleForFirebase(v); saveLS('ptt_schedule', state.schedule); renderTable(); renderTodayPills(); });
     on(r.offsets,  (v)=>{ state.offsets=v; saveLS('ptt_offsets', v); });
     on(r.ui,       (v)=>{ state.ui={...state.ui,...v}; saveLS('ptt_ui', state.ui); applyTheme(); renderTodayPills(); });
     on(r.media,    async (v)=>{
-      // لو فيه روابط من السحابة استخدمها مباشرة
       if(v.athanUrl){ audioAthan.src = v.athanUrl; }
       if(v.iqamaUrl){ audioIqama.src = v.iqamaUrl; }
       if(v.bgUrl){ document.body.style.backgroundImage = `url(${v.bgUrl})`; }
@@ -518,14 +630,23 @@
     fb.unsub = ()=>{ fb.db.ref(r.schedule).off(); fb.db.ref(r.offsets).off(); fb.db.ref(r.ui).off(); fb.db.ref(r.media).off(); cloudStatus('تم إيقاف الاستقبال'); };
   }
 
-  function pushToCloud({schedule=false, offsets=false, ui=false, media=false}={}){
-    if(!state.cloud.enabled){ return; }
-    if(!initFirebase()){ return; }
+  function pushToCloud({schedule=false, offsets=false, ui=false}={}){
+    if(!state.cloud.enabled) { cloudStatus('المزامنة متوقفة'); return Promise.resolve(false); }
+    if(!initFirebase()) { cloudStatus('Firebase غير مهيّأ'); return Promise.resolve(false); }
+    // نظّف المفاتيح قبل الدفع
+    const cleanSchedule = sanitizeScheduleForFirebase(state.schedule);
+    state.schedule = cleanSchedule; // حافظ محليًا على النسخة النظيفة
+    saveLS('ptt_schedule', state.schedule);
+
     const r=getRefs(); const updates={};
-    if(schedule) updates[r.schedule] = state.schedule;
+    if(schedule) updates[r.schedule] = cleanSchedule;
     if(offsets)  updates[r.offsets]  = state.offsets;
     if(ui)       updates[r.ui]       = state.ui;
-    if(Object.keys(updates).length){ fb.db.ref().update(updates).catch(e=>console.warn('push failed',e)); }
+    if(!Object.keys(updates).length) return Promise.resolve(true);
+    cloudStatus('يتم إرسال التعديلات...');
+    return fb.db.ref().update(updates)
+      .then(()=>{ cloudStatus('تمت مزامنة البيانات'); return true; })
+      .catch(e=>{ console.warn('push failed',e); cloudStatus('فشل الكتابة: '+(e?.code||e?.message||e)); alert('فشل رفع البيانات إلى السحابة:\n'+(e?.message||e)); return false; });
   }
 
   async function uploadToStorage(file, key){
@@ -544,12 +665,15 @@
 
   // ======= ربط الواجهة =======
   function initControls(){
+    // رفع الجدول
     el('scheduleFile').addEventListener('change', (e)=>{ const f=e.target.files?.[0]; if(f) handleScheduleFile(f); });
     const drop = el('dropzone'); drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.style.background='rgba(255,255,255,0.08)';}); drop.addEventListener('dragleave', e=>{ drop.style.background='rgba(255,255,255,0.04)';}); drop.addEventListener('drop', e=>{ e.preventDefault(); drop.style.background='rgba(255,255,255,0.04)'; const f=e.dataTransfer.files?.[0]; if(f) handleScheduleFile(f); });
 
+    // offsets
     const map = {Fajr:'offFajr', Dhuhr:'offDhuhr', Asr:'offAsr', Maghrib:'offMaghrib', Isha:'offIsha'}; for(const p of PRAYERS){ el(map[p]).value = state.offsets[p] ?? 0; }
     el('graceMin').value = state.ui.graceMin ?? 8;
 
+    // الصوت
     el('athanSound').addEventListener('change', async e=>{ const f=e.target.files?.[0]; if(!f) return; try{ await idbSet('ptt_audioAthan', f); await loadAudios(); status('تم تعيين صوت الأذان'); if(state.cloud.enabled) await uploadToStorage(f, 'athan'); } catch(err){ alert('تعذّر حفظ/رفع صوت الأذان.'); } });
     el('iqamaSound').addEventListener('change', async e=>{ const f=e.target.files?.[0]; if(!f) return; try{ await idbSet('ptt_audioIqama', f); await loadAudios(); status('تم تعيين صوت الإقامة'); if(state.cloud.enabled) await uploadToStorage(f, 'iqama'); } catch(err){ alert('تعذّر حفظ/رفع صوت الإقامة.'); } });
     el('testAthan').onclick = ()=>{ if(state.audioEnabled && audioAthan.src) { audioAthan.currentTime=0; audioAthan.play(); } else alert('فعّل الصوت وعيّن ملفًا أولًا.'); };
@@ -557,26 +681,37 @@
     el('clearAthan').onclick = async ()=>{ try{ await idbDelete('ptt_audioAthan'); await loadAudios(); status('تم حذف صوت الأذان'); if(state.cloud.enabled) await fb.db.ref(getRefs().media).update({athanUrl:null}); }catch{} };
     el('clearIqama').onclick = async ()=>{ try{ await idbDelete('ptt_audioIqama'); await loadAudios(); status('تم حذف صوت الإقامة'); if(state.cloud.enabled) await fb.db.ref(getRefs().media).update({iqamaUrl:null}); }catch{} };
 
+    // الثيم
     el('googleFontUrl').value = state.ui.googleFontUrl || '';
     el('accent').value = state.ui.colors.accent; el('accent2').value = state.ui.colors.accent2; el('bg').value = state.ui.colors.bg; el('textColor').value = state.ui.colors.text;
     el('phaseAthanColor').value = state.ui.colors.phaseAthan || '#60a5fa';
     el('phaseIqamaColor').value = state.ui.colors.phaseIqama || '#fbbf24';
     el('phaseGraceColor').value = state.ui.colors.phaseGrace || '#a8b3cf';
-    el('bgImage').addEventListener('change', async e=>{ const f=e.target.files?.[0]; if(!f) return; try{ await idbSet('ptt_bgImage', f); saveLS('ptt_ui', state.ui); await loadBgFromStore(); status('تم تعيين الخلفية'); if(state.cloud.enabled) await uploadToStorage(f, 'bg'); } catch(err){ alert('تعذّر حفظ/رفع الخلفية.'); } });
+    el('bgImage').addEventListener('change', async e=>{ const f=e.target.files?.[0]; if(!f) return; try{ await idbSet('ptt_bgImage', f); await loadBgFromStore(); status('تم تعيين الخلفية'); if(state.cloud.enabled) await uploadToStorage(f, 'bg'); } catch(err){ alert('تعذّر حفظ/رفع الخلفية.'); } });
     el('clearBg').onclick = async ()=>{ try{ await idbDelete('ptt_bgImage'); await loadBgFromStore(); status('تمت إزالة الخلفية'); if(state.cloud.enabled) await fb.db.ref(getRefs().media).update({bgUrl:null}); }catch{} };
 
+    // الوقت
     el('timeFormat').value = state.ui.timeFormat || '12'; el('tzOffset').value = state.ui.tzOffset || 0;
 
     // Cloud controls
     el('cloudEnabled').value = state.cloud.enabled ? 'on' : 'off';
     el('roomId').value = state.cloud.roomId || 'default';
     const cfg = state.cloud.config||{}; el('fb_apiKey').value = cfg.apiKey||''; el('fb_authDomain').value=cfg.authDomain||''; el('fb_databaseURL').value=cfg.databaseURL||''; el('fb_storageBucket').value=cfg.storageBucket||'';
-    el('fbConnect').onclick = ()=>{ state.cloud.config = { apiKey:el('fb_apiKey').value.trim(), authDomain:el('fb_authDomain').value.trim(), databaseURL:el('fb_databaseURL').value.trim(), storageBucket:el('fb_storageBucket').value.trim() }; saveLS('ptt_cloud', state.cloud); if(initFirebase()) cloudStatus('جاهز'); };
+
+    el('fbConnect').onclick = ()=>{ state.cloud.config = { apiKey:el('fb_apiKey').value.trim(), authDomain:el('fb_authDomain').value.trim(), databaseURL:el('fb_databaseURL').value.trim(), storageBucket:normalizeBucket(el('fb_storageBucket').value.trim()) }; saveLS('ptt_cloud', state.cloud); if(initFirebase()) cloudStatus('جاهز'); };
     el('fbLogin').onclick = ()=>{ state.cloud.email = el('fb_email').value.trim(); state.cloud.password = el('fb_password').value; saveLS('ptt_cloud', state.cloud); fbLogin(); };
     el('fbLogout').onclick = fbLogout;
-    el('fbTest').onclick = ()=>{ if(!initFirebase()) return; try{ const testRef = fb.db.ref(getRefs().base+'/ping'); testRef.set(Date.now()); cloudStatus('اتصال قاعدة البيانات OK'); }catch(e){ cloudStatus('فشل الاختبار'); } };
+    el('fbTest').onclick = ()=>{ if(!initFirebase()) return; try{ const testRef = fb.db.ref(getRefs().base+'/ping'); testRef.set(Date.now()).then(()=> cloudStatus('اتصال قاعدة البيانات OK (كتابة)')).catch(e=> cloudStatus('اتصال القراءة OK — الكتابة فشلت: '+(e?.code||e?.message))); }catch(e){ cloudStatus('فشل الاختبار'); } };
 
-    el('enableAudioBtn').onclick = enableAudio; el('enableAudioFloating').onclick = enableAudio; el('openScreen').onclick = ()=>{ window.open(location.pathname + '?screen=1', '_blank'); };
+    el('enableAudioBtn').onclick = enableAudio; el('enableAudioFloating').onclick = enableAudio;
+    el('openScreen').onclick = ()=>{
+      const params = new URLSearchParams({screen: '1'});
+      if(state.cloud.enabled){
+        params.set('cloud','1'); params.set('room', state.cloud.roomId || 'default');
+        const c=state.cloud.config||{}; if(c.apiKey) params.set('apiKey', c.apiKey); if(c.authDomain) params.set('authDomain', c.authDomain); if(c.databaseURL) params.set('databaseURL', c.databaseURL); if(c.storageBucket) params.set('storageBucket', c.storageBucket);
+      }
+      window.open(location.pathname + '?' + params.toString(), '_blank');
+    };
 
     el('openSettings').onclick = ()=>{ el('settings').classList.toggle('hidden'); };
 
@@ -594,23 +729,62 @@
 
     el('exportData').onclick = ()=>{ const blob=new Blob([JSON.stringify({schedule:state.schedule, offsets:state.offsets, ui:state.ui}, null, 2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='prayer-tracker-backup.json'; a.click(); URL.revokeObjectURL(url); };
     el('exportWithMedia').onclick = async ()=>{ const data={schedule:state.schedule, offsets:state.offsets, ui:state.ui, media:{}}; try{ const a=await idbGet('ptt_audioAthan'); if(a) data.media.audioAthan=await blobToDataURL(a); const q=await idbGet('ptt_audioIqama'); if(q) data.media.audioIqama=await blobToDataURL(q); const bg=await idbGet('ptt_bgImage'); if(bg) data.media.bgImage=await blobToDataURL(bg);}catch(e){} const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='prayer-tracker-backup-with-media.json'; a.click(); URL.revokeObjectURL(url); };
-    el('importData').onclick = ()=>{ const inp=document.createElement('input'); inp.type='file'; inp.accept='.json'; inp.onchange = e=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=async ()=>{ try{ const data=JSON.parse(r.result); if(data.schedule){ state.schedule=data.schedule; saveLS('ptt_schedule',state.schedule); } if(data.offsets){ state.offsets=data.offsets; saveLS('ptt_offsets',state.offsets); } if(data.ui){ state.ui={...state.ui,...data.ui}; saveLS('ptt_ui',state.ui); } if(data.media){ if(data.media.audioAthan){ const b=dataURLtoBlob(data.media.audioAthan); if(b) await idbSet('ptt_audioAthan', b); } if(data.media.audioIqama){ const b=dataURLtoBlob(data.media.audioIqama); if(b) await idbSet('ptt_audioIqama', b); } if(data.media.bgImage){ const b=dataURLtoBlob(data.media.bgImage); if(b) await idbSet('ptt_bgImage', b); } } await loadAudios(); await loadBgFromStore(); applyTheme(); renderTable(); renderTodayPills(); status('تم الاستيراد'); if(state.cloud.enabled) pushToCloud({schedule:true, offsets:true, ui:true}); }catch(e){ alert('ملف النسخة الاحتياطية غير صالح'); } }; r.readAsText(f); }; inp.click(); };
+    el('importData').onclick = ()=>{ const inp=document.createElement('input'); inp.type='file'; inp.accept='.json'; inp.onchange = e=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=async ()=>{ try{ const data=JSON.parse(r.result); if(data.schedule){ state.schedule=sanitizeScheduleForFirebase(data.schedule); saveLS('ptt_schedule',state.schedule); } if(data.offsets){ state.offsets=data.offsets; saveLS('ptt_offsets',state.offsets); } if(data.ui){ state.ui={...state.ui,...data.ui}; saveLS('ptt_ui',state.ui); } if(data.media){ if(data.media.audioAthan){ const b=dataURLtoBlob(data.media.audioAthan); if(b) await idbSet('ptt_audioAthan', b); } if(data.media.audioIqama){ const b=dataURLtoBlob(data.media.audioIqama); if(b) await idbSet('ptt_audioIqama', b); } if(data.media.bgImage){ const b=dataURLtoBlob(data.media.bgImage); if(b) await idbSet('ptt_bgImage', b); } } await loadAudios(); await loadBgFromStore(); applyTheme(); renderTable(); renderTodayPills(); status('تم الاستيراد'); if(state.cloud.enabled) pushToCloud({schedule:true, offsets:true, ui:true}); }catch(e){ alert('ملف النسخة الاحتياطية غير صالح'); } }; r.readAsText(f); }; inp.click(); };
 
     el('resetAll').onclick = async ()=>{ if(!confirm('سيتم مسح جميع البيانات (محليًا). هل تريد المتابعة؟')) return; localStorage.removeItem('ptt_schedule'); localStorage.removeItem('ptt_offsets'); localStorage.removeItem('ptt_audioFlags'); localStorage.removeItem('ptt_ui'); localStorage.removeItem('ptt_cloud'); await idbClear(); location.reload(); };
+
+    el('runTests').onclick = runSelfTests;
+    el('showUsage').onclick = showStorageUsage;
+    el('clearIDB').onclick = async ()=>{ await idbClear(); alert('تم مسح IndexedDB.'); };
+
+    // أزرار السحب/الدفع
+    el('pushAll').onclick = ()=>{ pushToCloud({schedule:true, offsets:true, ui:true}); };
+    el('pullAll').onclick = ()=>{ if(!initFirebase()) return; const r=getRefs(); Promise.all([
+      fb.db.ref(r.schedule).once('value'),
+      fb.db.ref(r.offsets).once('value'),
+      fb.db.ref(r.ui).once('value')
+    ]).then(([s,o,u])=>{
+      if(s.exists()){ state.schedule=sanitizeScheduleForFirebase(s.val()); saveLS('ptt_schedule',state.schedule); }
+      if(o.exists()){ state.offsets=o.val(); saveLS('ptt_offsets',state.offsets); }
+      if(u.exists()){ state.ui={...state.ui, ...u.val()}; saveLS('ptt_ui',state.ui); applyTheme(); }
+      renderTable(); renderTodayPills(); status('تم السحب من السحابة');
+    }).catch(e=>{ alert('فشل السحب من السحابة: '+(e?.message||e)); }); };
   }
 
   // ======= اختبارات =======
-  async function runSelfTests(){ const out=[]; const ok=(name,cond)=>out.push(`${cond?'✅':'❌'} ${name}`);
+  async function runSelfTests(){
+    const out=[]; const ok=(name,cond)=>out.push(`${cond?'✅':'❌'} ${name}`);
     const d='2025-01-01'; ok('تحليل 12ص', parseTimeToDate(d,'12:00 ص').getHours()===0); ok('تحليل 12م', parseTimeToDate(d,'12:00 م').getHours()===12); ok('تحليل 24h 23:59', parseTimeToDate(d,'23:59').getHours()===23); ok('تنسيق 12h', fmtClock(new Date('2025-01-01T13:05:00'),'12')==='1:05 م'); ok('تنسيق 24h', fmtClock(new Date('2025-01-01T09:07:00'),'24')==='09:07');
-    try{ saveLS('ptt_test_small',{a:1}); ok('LocalStorage OK', JSON.parse(localStorage.getItem('ptt_test_small')).a===1); }catch{ ok('LocalStorage OK', false); }
-    try{ const testBlob=new Blob([new Uint8Array([1,2,3,4])]); await idbSet('ptt_test_blob', testBlob); const got=await idbGet('ptt_test_blob'); ok('IndexedDB OK', !!got && got.size===4); await idbDelete('ptt_test_blob'); }catch{ ok('IndexedDB OK', false); }
-    const prev=state.phase; state.phase='athan'; setPhaseVisuals(); ok('لون الأذان', el('phase').classList.contains('phase-athan')); state.phase='iqama'; setPhaseVisuals(); ok('لون الإقامة', el('phase').classList.contains('phase-iqama')); state.phase='grace'; setPhaseVisuals(); ok('لون الصلاة قائمة', el('phase').classList.contains('phase-grace')); state.phase=prev;
-    el('testOutput').textContent = out.join('\n'); }
+    // Sanitizers
+    ok('sanitizeDateKey basic', sanitizeDateKey('2025-08-10]')==='2025-08-10');
+    ok('sanitizeDateKey slashes', sanitizeDateKey(' 2025/08/10 ')==='2025-08-10');
+    const schBad={ '2025-08-10]':{Fajr:'04:00 ص'}, 'x':{Fajr:'04:00 ص'} };
+    const schGood=sanitizeScheduleForFirebase(schBad); ok('sanitizeScheduleForFirebase', Object.keys(schGood).length===1 && schGood['2025-08-10']);
+    el('testOutput').textContent = out.join('\n');
+  }
 
   async function showStorageUsage(){ const lsBytes = new Blob([JSON.stringify(localStorage)]).size; const a=await idbGet('ptt_audioAthan'); const q=await idbGet('ptt_audioIqama'); const bg=await idbGet('ptt_bgImage'); const idbBytes=(a?.size||0)+(q?.size||0)+(bg?.size||0); el('testOutput').textContent = `LocalStorage≈ ${lsBytes} bytes; IndexedDB media≈ ${idbBytes} bytes`; }
 
   // ======= إقلاع =======
-  (async function(){ if(SCREEN) document.body.classList.add('screen'); await migrateIfNeeded(); applyTheme(); initControls(); renderTable(); renderTodayPills(); await loadAudios(); updateFloatingAudio(); start(); if(state.cloud.enabled){ initFirebase(); subscribeCloud(); } })();
+  (async function(){
+    if(SCREEN) document.body.classList.add('screen');
+    applyUrlParams();
+    await migrateIfNeeded();
+    applyTheme();
+    initControls();
+    renderTable();
+    renderTodayPills();
+    await loadAudios();
+    updateFloatingAudio();
+    start();
+    if(state.cloud.enabled){
+      if(initFirebase()){
+        const p = new URLSearchParams(location.search);
+        if((p.get('autologin')||'0')!=='0' && state.cloud.email && state.cloud.password){ await fbLogin(); }
+        subscribeCloud();
+      }
+    }
+  })();
   </script>
 </body>
 </html>
