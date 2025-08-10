@@ -383,10 +383,11 @@ function parseTimeToDate(dateStr, timeStr, tzOffsetMin=0){
     if(ap==='AM' && h===12) h = 0;
   }
 
-  const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00`);
+  const d = new Date(dateStr + 'T' + String(h).padStart(2,'0') + ':' + String(min).padStart(2,'0') + ':00');
   if(tzOffsetMin){ d.setMinutes(d.getMinutes() + tzOffsetMin); }
   return d;
 }
+
 
 
   function fmtClock(date, mode){
@@ -648,6 +649,7 @@ function parseTimeToDate(dateStr, timeStr, tzOffsetMin=0){
   function pushToCloud({schedule=false, offsets=false, ui=false}={}){
     if(!state.cloud.enabled) { cloudStatus('المزامنة متوقفة'); return Promise.resolve(false); }
     if(!initFirebase()) { cloudStatus('Firebase غير مهيّأ'); return Promise.resolve(false); }
+    if(!fb || !fb.db || typeof fb.db.ref !== 'function'){ cloudStatus('قاعدة البيانات غير جاهزة'); return Promise.resolve(false); }
     // نظّف المفاتيح قبل الدفع
     const cleanSchedule = sanitizeScheduleForFirebase(state.schedule);
     state.schedule = cleanSchedule; // حافظ محليًا على النسخة النظيفة
