@@ -362,17 +362,28 @@
   }
 
   // تحليل وقت (يدعم 12/24 و ص/م)
-  function parseTimeToDate(dateStr, timeStr, tzOffsetMin=0){
-    if(!timeStr) return null; let t = (''+timeStr).trim().toUpperCase();
-    let is12 = /\bAM\b|\bPM\b|\bص\b|\bم\b/.test(t);
-    t = t.replace('ص','AM').replace('م','PM');
-    let [hm, ap] = is12 ? t.split(/\s+/) : [t, null];
-    let [h,m] = hm.split(':').map(x=>parseInt(x,10));
-    if(is12){ if(ap==='PM' && h!==12) h+=12; if(ap==='AM' && h===12) h=0; }
-    const d = new Date(dateStr + 'T' + pad(h) + ':' + pad(m) + ':00');
-    if(tzOffsetMin){ d.setMinutes(d.getMinutes() + tzOffsetMin); }
-    return d;
-  }
+ function parseTimeToDate(dateStr, timeStr, tzOffsetMin=0){
+  if(!timeStr) return null;
+
+  // طَبِّع الأرقام العربية إلى إنجليزية (احتياطيًا)
+  const arDigits = '٠١٢٣٤٥٦٧٨٩';
+  let s = (''+timeStr).trim().replace(/[٠-٩]/g, d => String(arDigits.indexOf(d)));
+
+  // حوّل لاحقة العربية في نهاية النص إلى AM/PM
+  s = s.replace(/\s*ص\s*$/i, ' AM').replace(/\s*م\s*$/i, ' PM');
+
+  // استخرج hh:mm واللاحقة (إن وجدت)
+  const m = s.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+  if(!m) return null;
+
+  let h = parseInt(m[1],10), min = parseInt(m[2],10);
+  const ap = m[3] ? m[3].toUpperCase() : null;
+  if(ap){ if(ap==='PM' && h!==12) h+=12; if(ap==='AM' && h===12) h=0; }
+
+  const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00`);
+  if(tzOffsetMin){ d.setMinutes(d.getMinutes() + tzOffsetMin); }
+  return d;
+}
 
   function fmtClock(date, mode){
     if(!(date instanceof Date)) return '—';
