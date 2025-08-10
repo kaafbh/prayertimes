@@ -385,10 +385,11 @@ function parseTimeToDate(dateStr, timeStr, tzOffsetMin=0){
     if(ap==='AM' && h===12) h = 0;
   }
 
-  const d = new Date(dateStr + 'T' + String(h).padStart(2,'0') + ':' + String(min).padStart(2,'0') + ':00');
+  const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00`);
   if(tzOffsetMin){ d.setMinutes(d.getMinutes() + tzOffsetMin); }
   return d;
 }
+
 
 
 
