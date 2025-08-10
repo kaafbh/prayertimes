@@ -351,6 +351,8 @@
   const pad = n => n.toString().padStart(2,'0');
   const qs = new URLSearchParams(location.search);
   const SCREEN = qs.get('screen') === '1' || qs.has('screen');
+  const AUTO_AUDIO = qs.get('autoplay') === '1' || qs.get('autoaudio') === '1';
+
 
   // تاريخ/وقت الآن للنص العلوي
   function nowString(){
@@ -722,7 +724,7 @@ function parseTimeToDate(dateStr, timeStr, tzOffsetMin=0){
 
     el('enableAudioBtn').onclick = enableAudio; el('enableAudioFloating').onclick = enableAudio;
     el('openScreen').onclick = ()=>{
-      const params = new URLSearchParams({screen: '1'});
+      const params = new URLSearchParams({screen: '1', autoplay: '1'});
       if(state.cloud.enabled){
         params.set('cloud','1'); params.set('room', state.cloud.roomId || 'default');
         const c=state.cloud.config||{}; if(c.apiKey) params.set('apiKey', c.apiKey); if(c.authDomain) params.set('authDomain', c.authDomain); if(c.databaseURL) params.set('databaseURL', c.databaseURL); if(c.storageBucket) params.set('storageBucket', c.storageBucket);
@@ -794,6 +796,11 @@ function parseTimeToDate(dateStr, timeStr, tzOffsetMin=0){
     await loadAudios();
     updateFloatingAudio();
     start();
+    if (SCREEN && AUTO_AUDIO) {
+  const tryEnable = ()=>{ try { enableAudio(); } catch(_){} };
+  setTimeout(tryEnable, 300);
+  setTimeout(tryEnable, 1500);
+}
     if(state.cloud.enabled){
       if(initFirebase()){
         const p = new URLSearchParams(location.search);
