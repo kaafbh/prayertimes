@@ -10,11 +10,9 @@ const SCREEN = SCREEN_MODE === '1';
 const SCREEN2 = SCREEN_MODE === '2';
 const AUTO_AUDIO = qs.get('autoplay') === '1' || qs.get('autoaudio') === '1';
 
-// أضف الكلاس المناسب للجسم
 if (SCREEN2) { document.body.classList.add('screen2'); }
 else if (SCREEN) { document.body.classList.add('screen'); }
 
-// تاريخ/وقت الآن للنص العلوي
 function nowString(){
   const d = new Date();
   const yyyy = d.getFullYear(); const mm = pad(d.getMonth()+1); const dd = pad(d.getDate());
@@ -23,7 +21,6 @@ function nowString(){
   return `الآن: ${yyyy}-${mm}-${dd} ${h}:${mi}:${ss} ${ap}`;
 }
 
-// تحليل وقت (يدعم 12/24 و ص/م)
 function parseTimeToDate(dateStr, timeStr, tzOffsetMin=0){
   if(!timeStr) return null;
   const arDigits = '٠١٢٣٤٥٦٧٨٩';
@@ -57,17 +54,17 @@ function fmtDuration(ms){
 function loadLS(key, fallback){ try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }catch{ return fallback; } }
 function saveLS(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){ console.warn('LocalStorage save failed', key, e); if(e && (e.name==='QuotaExceededError'||e.code===22)) alert('التخزين المحلي ممتلئ.'); } }
 
-// ======= IndexedDB للوسائط =======
+// ======= IndexedDB =======
 let dbPromise = null;
 function getDB(){ if(dbPromise) return dbPromise; dbPromise = new Promise((resolve,reject)=>{ const open=indexedDB.open('ptt_db',1); open.onupgradeneeded=()=>{ const db=open.result; if(!db.objectStoreNames.contains('files')) db.createObjectStore('files'); }; open.onsuccess=()=>resolve(open.result); open.onerror=()=>reject(open.error); }); return dbPromise; }
 async function idbSet(key, blob){ const db=await getDB(); return new Promise((res,rej)=>{ const tx=db.transaction('files','readwrite'); tx.objectStore('files').put(blob,key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
 async function idbGet(key){ const db=await getDB(); return new Promise((res,rej)=>{ const tx=db.transaction('files','readonly'); const rq=tx.objectStore('files').get(key); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error); }); }
 async function idbDelete(key){ const db=await getDB(); return new Promise((res,rej)=>{ const tx=db.transaction('files','readwrite'); tx.objectStore('files').delete(key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
 async function idbClear(){ const db=await getDB(); return new Promise((res,rej)=>{ const tx=db.transaction('files','readwrite'); tx.objectStore('files').clear(); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
+
 function dataURLtoBlob(dataURL){ try{ const [meta,b64]=dataURL.split(','); const mime=(meta.match(/data:(.*?);base64/)||[])[1]||'application/octet-stream'; const bin=atob(b64); const len=bin.length; const arr=new Uint8Array(len); for(let i=0;i<len;i++) arr[i]=bin.charCodeAt(i); return new Blob([arr],{type:mime}); }catch(e){ console.warn('dURL->Blob failed',e); return null; } }
 function blobToDataURL(blob){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=()=>rej(fr.error); fr.readAsDataURL(blob); }); }
 
-// ======= Sanitizers =======
 const INVALID_KEY_CHARS = /[.#$/\[\]]/g;
 function sanitizeDateKey(k){
   if(!k) return null;
@@ -100,23 +97,20 @@ const state = {
     bgImageKey:null, bgMode:'color', timeFormat:'12', tzOffset:0, graceMin:8
   }),
   audioEnabled: false,
-  phase: 'athan', // 'athan' | 'iqama' | 'grace'
+  phase: 'athan',
   next: null,
   cloud: loadLS('ptt_cloud', {enabled:false, roomId:'Media_Office', config:{}, signedIn:false})
 };
 
-// ======= ترحيل قديم =======
 async function migrateIfNeeded(){
   const oldA = localStorage.getItem('ptt_audioAthan'); if(oldA && oldA.startsWith('data:')){ const b=dataURLtoBlob(oldA); if(b) await idbSet('ptt_audioAthan', b); localStorage.removeItem('ptt_audioAthan'); }
   const oldQ = localStorage.getItem('ptt_audioIqama'); if(oldQ && oldQ.startsWith('data:')){ const b=dataURLtoBlob(oldQ); if(b) await idbSet('ptt_audioIqama', b); localStorage.removeItem('ptt_audioIqama'); }
   if(state.ui && state.ui.bgImage && state.ui.bgImage.startsWith?.('data:')){ const b=dataURLtoBlob(state.ui.bgImage); if(b){ await idbSet('ptt_bgImage', b); state.ui.bgImageKey='ptt_bgImage'; delete state.ui.bgImage; saveLS('ptt_ui', state.ui); } }
 }
 
-// ======= جدول اليوم =======
 function renderTable(){ const tb = el('scheduleTable')?.querySelector('tbody'); if(!tb) return; tb.innerHTML=''; const dates=Object.keys(state.schedule).sort(); for(const d of dates){ const r=state.schedule[d]; const tr=document.createElement('tr'); tr.innerHTML = `<td>${d}</td>` + PRAYERS.map(p=>`<td>${r[p]||'—'}</td>`).join(''); tb.appendChild(tr); } }
 function renderTodayPills(){ const grid = el('todayGrid'); if(!grid) return; grid.innerHTML=''; const todayKey=toKey(todayLocal()); const row=state.schedule[todayKey]; for(const p of PRAYERS){ const div=document.createElement('div'); div.className='pill'; const timeStr=row?row[p]:'—'; const dt=row?parseTimeToDate(todayKey, timeStr, state.ui.tzOffset):null; div.innerHTML = `<div class="label">${DISPLAY[p]}</div><div class="value">${fmtClock(dt||'—', state.ui.timeFormat)}</div>`; grid.appendChild(div); } }
 
-// ======= خلفية =======
 let bgUrl = null;
 async function loadBgFromStore(){
   try{
@@ -126,12 +120,11 @@ async function loadBgFromStore(){
       bgUrl=URL.createObjectURL(blob);
       document.body.style.backgroundImage=`url(${bgUrl})`;
     } else {
-      document.body.style.backgroundImage=''; // لون فقط
+      document.body.style.backgroundImage='';
     }
   }catch(e){ console.warn('load bg failed',e); }
 }
 
-// ======= وقت ومنطق =======
 function todayLocal(){ const n=new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
 function toKey(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 function findNext(){
@@ -176,7 +169,6 @@ function start(){
   }, 250);
 }
 
-// ======= قراءة CSV/JSON =======
 function parseCSV(text){
   const lines=text.replace(/\r/g,'').trim().split(/\n+/);
   if(lines.length===0) return {};
@@ -251,7 +243,6 @@ function handleScheduleFile(file){
   reader.readAsText(file);
 }
 
-// ======= الصوت/الثيم =======
 const audioAthan = el('audioAthan'); const audioIqama = el('audioIqama'); let athanUrl=null, iqamaUrl=null;
 async function loadAudios(){ try{ const a=await idbGet('ptt_audioAthan'); if(athanUrl){ URL.revokeObjectURL(athanUrl); athanUrl=null; } if(a){ athanUrl=URL.createObjectURL(a); audioAthan.src=athanUrl; state.audioFlags.athan=true; } else { audioAthan.removeAttribute('src'); state.audioFlags.athan=false; } const q=await idbGet('ptt_audioIqama'); if(iqamaUrl){ URL.revokeObjectURL(iqamaUrl); iqamaUrl=null; } if(q){ iqamaUrl=URL.createObjectURL(q); audioIqama.src=iqamaUrl; state.audioFlags.iqama=true; } else { audioIqama.removeAttribute('src'); state.audioFlags.iqama=false; } saveLS('ptt_audioFlags', state.audioFlags); }catch(e){ console.warn('loadAudios failed',e); } }
 function enableAudio(){ state.audioEnabled=true; [audioAthan,audioIqama].forEach(a=>{ a.muted=true; a.play().catch(()=>{}).finally(()=>{ a.pause(); a.currentTime=0; a.muted=false; }); }); status('تم تفعيل الصوت'); updateFloatingAudio(); }
@@ -259,7 +250,6 @@ function updateFloatingAudio(){ const fa=el('floatingAudio'); if(!fa) return; if
 
 function applyTheme(){ document.body.style.setProperty('--accent', state.ui.colors.accent); document.body.style.setProperty('--accent-2', state.ui.colors.accent2); document.body.style.setProperty('--bg', state.ui.colors.bg); document.body.style.setProperty('--text', state.ui.colors.text); document.body.style.setProperty('--phase-athan', state.ui.colors.phaseAthan||'#60a5fa'); document.body.style.setProperty('--phase-iqama', state.ui.colors.phaseIqama||'#fbbf24'); document.body.style.setProperty('--phase-grace', state.ui.colors.phaseGrace||'#a8b3cf'); document.body.style.fontFamily = state.ui.font; if(state.ui.googleFontUrl){ el('googleFontLink').href = state.ui.googleFontUrl; } loadBgFromStore(); }
 
-// ======= URL Params (Cloud Auto-Config) =======
 function normalizeBucket(b){ if(!b) return b; return /\.firebasestorage\.app$/i.test(b) ? b.replace(/\.firebasestorage\.app$/i, '.appspot.com') : b; }
 function applyUrlParams(params){
   try{
@@ -278,10 +268,9 @@ function applyUrlParams(params){
   }catch(e){ console.warn('URL params apply failed', e); }
 }
 
-// ======= Firebase Sync =======
 let fb={app:null, auth:null, db:null, storage:null, unsub:null};
 function cloudStatus(msg){ const x=el('cloudStatus'); if(x) x.textContent = msg; }
-function getRoomPath(){ const room = (state.cloud.roomId||'default').replace(/[^a-zA-Z0-9_-]/g,'-'); return `rooms/${room}`; }
+function getRoomPath(){ const room = (state.cloud.roomId||'Media_Office').replace(/[^a-zA-Z0-9_-]/g,'-'); return `rooms/${room}`; }
 function getRefs(){ const base=getRoomPath(); return { base, schedule:`${base}/schedule`, offsets:`${base}/offsets`, ui:`${base}/ui`, media:`${base}/media`}; }
 
 function initFirebase(){
@@ -307,7 +296,7 @@ function subscribeCloud(){
   on(r.schedule, (v)=>{ state.schedule=sanitizeScheduleForFirebase(v); saveLS('ptt_schedule', state.schedule); renderTable(); renderTodayPills(); });
   on(r.offsets,  (v)=>{ state.offsets=v; saveLS('ptt_offsets', v); });
   on(r.ui,       (v)=>{ state.ui={...state.ui,...v}; saveLS('ptt_ui', state.ui); applyTheme(); renderTodayPills(); });
-  on(r.media,    async (v)=>{
+  on(r.media,    (v)=>{
     if(v.athanUrl){ audioAthan.src = v.athanUrl; }
     if(v.iqamaUrl){ audioIqama.src = v.iqamaUrl; }
     if(v.bgUrl){ document.body.style.backgroundImage = `url(${v.bgUrl})`; }
@@ -342,7 +331,7 @@ function pushToCloud({schedule=false, offsets=false, ui=false}={}){
 async function uploadToStorage(file, key){
   try{
     if(!initFirebase()) return null; if(!fb.storage) return null;
-    const room = (state.cloud.roomId||'default').replace(/[^a-zA-Z0-9_-]/g,'-');
+    const room = (state.cloud.roomId||'Media_Office').replace(/[^a-zA-Z0-9_-]/g,'-');
     const path = `rooms/${room}/${key}`;
     const ref = fb.storage.ref().child(path);
     const snap = await ref.put(file);
@@ -353,20 +342,16 @@ async function uploadToStorage(file, key){
   }catch(e){ alert('فشل رفع الملف للسحابة: '+e.message); return null; }
 }
 
-// ======= ربط الواجهة =======
 function initControls(){
-  // رفع الجدول + Dropzone
   el('scheduleFile').addEventListener('change', (e)=>{ const f=e.target.files?.[0]; if(f) handleScheduleFile(f); });
   const drop = el('dropzone');
   drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.style.background='rgba(255,255,255,0.08)';});
   drop.addEventListener('dragleave', e=>{ drop.style.background='rgba(255,255,255,0.04)';});
   drop.addEventListener('drop', e=>{ e.preventDefault(); drop.style.background='rgba(255,255,255,0.04)'; const f=e.dataTransfer.files?.[0]; if(f) handleScheduleFile(f); });
 
-  // offsets
   const map = {Fajr:'offFajr', Dhuhr:'offDhuhr', Asr:'offAsr', Maghrib:'offMaghrib', Isha:'offIsha'}; for(const p of PRAYERS){ el(map[p]).value = state.offsets[p] ?? 0; }
   el('graceMin').value = state.ui.graceMin ?? 8;
 
-  // الصوت
   el('athanSound').addEventListener('change', async e=>{ const f=e.target.files?.[0]; if(!f) return; try{ await idbSet('ptt_audioAthan', f); await loadAudios(); status('تم تعيين صوت الأذان'); if(state.cloud.enabled) await uploadToStorage(f, 'athan'); } catch(err){ alert('تعذّر حفظ/رفع صوت الأذان.'); } });
   el('iqamaSound').addEventListener('change', async e=>{ const f=e.target.files?.[0]; if(!f) return; try{ await idbSet('ptt_audioIqama', f); await loadAudios(); status('تم تعيين صوت الإقامة'); if(state.cloud.enabled) await uploadToStorage(f, 'iqama'); } catch(err){ alert('تعذّر حفظ/رفع صوت الإقامة.'); } });
   el('testAthan').onclick = ()=>{ if(state.audioEnabled && audioAthan.src) { audioAthan.currentTime=0; audioAthan.play(); } else alert('فعّل الصوت وعيّن ملفًا أولًا.'); };
@@ -374,7 +359,6 @@ function initControls(){
   el('clearAthan').onclick = async ()=>{ try{ await idbDelete('ptt_audioAthan'); await loadAudios(); status('تم حذف صوت الأذان'); if(state.cloud.enabled) await fb.db.ref(getRefs().media).update({athanUrl:null}); }catch{} };
   el('clearIqama').onclick = async ()=>{ try{ await idbDelete('ptt_audioIqama'); await loadAudios(); status('تم حذف صوت الإقامة'); if(state.cloud.enabled) await fb.db.ref(getRefs().media).update({iqamaUrl:null}); }catch{} };
 
-  // الثيم
   el('googleFontUrl').value = state.ui.googleFontUrl || '';
   el('accent').value = state.ui.colors.accent; el('accent2').value = state.ui.colors.accent2; el('bg').value = state.ui.colors.bg; el('textColor').value = state.ui.colors.text;
   el('phaseAthanColor').value = state.ui.colors.phaseAthan || '#60a5fa';
@@ -384,10 +368,8 @@ function initControls(){
   if(el('bgImage')){ el('bgImage').addEventListener('change', async e=>{ const f=e.target.files?.[0]; if(!f) return; try{ await idbSet('ptt_bgImage', f); state.ui.bgMode='image'; saveLS('ptt_ui', state.ui); await loadBgFromStore(); status('تم تعيين الخلفية'); if(state.cloud.enabled) await uploadToStorage(f, 'bg'); } catch(err){ alert('تعذّر حفظ/رفع الخلفية.'); } }); }
   if(el('clearBg')){ el('clearBg').onclick = async ()=>{ try{ await idbDelete('ptt_bgImage'); state.ui.bgMode='color'; saveLS('ptt_ui', state.ui); await loadBgFromStore(); status('تمت إزالة الخلفية'); if(state.cloud.enabled) await fb.db.ref(getRefs().media).update({bgUrl:null}); }catch{} }; }
 
-  // الوقت
   el('timeFormat').value = state.ui.timeFormat || '12'; el('tzOffset').value = state.ui.tzOffset || 0;
 
-  // Cloud controls
   el('cloudEnabled').value = state.cloud.enabled ? 'on' : 'off';
   el('roomId').value = state.cloud.roomId || 'Media_Office';
   const cfg = state.cloud.config||{}; el('fb_apiKey').value = cfg.apiKey||''; el('fb_authDomain').value=cfg.authDomain||''; el('fb_databaseURL').value=cfg.databaseURL||''; el('fb_storageBucket').value=cfg.storageBucket||'';
@@ -397,9 +379,9 @@ function initControls(){
   el('fbLogout').onclick = fbLogout;
   el('fbTest').onclick = ()=>{ if(!initFirebase()) return; try{ const testRef = fb.db.ref(getRefs().base+'/ping'); testRef.set(Date.now()).then(()=> cloudStatus('اتصال قاعدة البيانات OK (كتابة)')).catch(e=> cloudStatus('اتصال القراءة OK — الكتابة فشلت: '+(e?.code||e?.message))); }catch(e){ cloudStatus('فشل الاختبار'); } };
 
-  // واجهة عامة
   el('enableAudioBtn').onclick = enableAudio;
   el('enableAudioFloating').onclick = enableAudio;
+
   el('openScreen').onclick = ()=>{
     const params = new URLSearchParams({ screen:'1', autoplay:'1' });
     if(state.cloud.enabled){
@@ -552,7 +534,7 @@ function initControls(){
     const sch = {'2025-08-10]':{Fajr:'04:00 ص'}, x:{Fajr:'04:00 ص'}};
     const clean = sanitizeScheduleForFirebase(sch);
     ok('sanitizeScheduleForFirebase', Object.keys(clean).length===1 && clean['2025-08-10']);
-    el('testOutput').textContent = lines.join('\\n');
+    el('testOutput').textContent = lines.join('\n');
   };
 
   el('showUsage').onclick = async()=>{
@@ -580,7 +562,6 @@ function initControls(){
 }
 
 (async function(){
-  // طبّق معلمات URL (مثلاً ?screen=2&cloud=1&room=Media_Office&apiKey=...)
   (function applyFromUrl(){
     const p = new URLSearchParams(location.search);
     const c = (p.get('cloud')||p.get('sync')||'').toLowerCase();
@@ -604,16 +585,12 @@ function initControls(){
   updateFloatingAudio();
   start();
 
-  // وضع الشاشة: تفعيل الصوت تلقائيًا إن وُجد autoplay=1
-  const AUTO_AUDIO = qs.get('autoplay') === '1' || qs.get('autoaudio') === '1';
   if((SCREEN || SCREEN2) && AUTO_AUDIO){
     setTimeout(()=>{ try{ enableAudio(); }catch{} }, 300);
     setTimeout(()=>{ try{ enableAudio(); }catch{} }, 1500);
   }
 
-  // عند المزامنة المفعّلة: فعّل Firebase واقرأ
   if(state.cloud.enabled && initFirebase()){
-    // إن تواجدت بيانات دخول عبر URL، حاول الدخول تلقائيًا (?autologin=1)
     const p = new URLSearchParams(location.search);
     if((p.get('autologin')||'0') !== '0' && state.cloud.email && state.cloud.password){
       await fbLogin();

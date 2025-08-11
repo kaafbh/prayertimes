@@ -4,11 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>متابعة مواقيت الصلاة</title>
-
-  <!-- Google Font (can be changed from settings via runtime) -->
   <link id="googleFontLink" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;800&display=swap">
-
-  <!-- Styles -->
   <link rel="stylesheet" href="styles.css">
 
   <!-- Firebase (Compat) CDN -->
@@ -17,7 +13,6 @@
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 
-  <!-- App -->
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -38,7 +33,6 @@
   </header>
 
   <main class="container">
-    <!-- شاشة العرض -->
     <section class="card hero" aria-live="polite">
       <div class="next-title">الصلاة القادمة</div>
       <div class="next-prayer">
@@ -51,13 +45,9 @@
       <div class="grid" id="todayGrid"></div>
     </section>
 
-    <!-- لوحة التحكم -->
     <aside class="card settings" id="settings">
       <h2>لوحة التحكم</h2>
-      <div class="small">
-        ارفع جدول الأذان، واضبط فترات الإقامة، والأصوات، والخلفية، والمظهر.
-        البيانات الصغيرة تُحفَظ محليًا، والوسائط الكبيرة في IndexedDB. يمكن تفعيل المزامنة الفورية (Firebase) بالأسفل.
-      </div>
+      <div class="small">ارفع جدول الأذان، واضبط فترات الإقامة، والأصوات، والخلفية، والمظهر. يمكن تفعيل المزامنة الفورية (Firebase) بالأسفل.</div>
 
       <div class="row">
         <div class="field">
@@ -118,7 +108,7 @@
           <div class="toolbar">
             <button class="danger ghost" id="clearBg">إزالة الخلفية</button>
           </div>
-          <div class="small">اختر "لون فقط" لاستخدام اللون من قسم الألوان بالأعلى، أو "صورة" لعرض صورة الخلفية المخزنة محليًا/سحابيًا.</div>
+          <div class="small">اختر "لون فقط" لاستخدام اللون من Section الألوان بالأعلى، أو "صورة" لعرض صورة الخلفية المخزنة.</div>
         </div>
       </div>
 
