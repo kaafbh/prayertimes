@@ -86,7 +86,7 @@ details { background: rgba(255,255,255,0.04); padding: 10px; border-radius: 12px
 summary { cursor: pointer; }
 pre { white-space: pre-wrap; word-break: break-word; background: rgba(0,0,0,.35); padding: 8px; border-radius: 8px; }
 
-/* ===== وضع شاشة العرض ===== */
+/* ===== وضع شاشة العرض 1 ===== */
 body.screen header { display: none; }
 body.screen footer { display: none; }
 body.screen .container { grid-template-columns: 1fr; padding: 20px; }
@@ -95,6 +95,21 @@ body.screen .hero { min-height: calc(100vh - 40px); display:grid; align-content:
 body.screen .next-prayer-name { font-size: clamp(36px, 8vw, 72px); }
 body.screen .countdown { font-size: clamp(40px, 12vw, 120px); }
 body.screen .next-prayer-time { font-size: clamp(18px, 4vw, 28px); }
-
 .floating-audio { position: fixed; inset-inline-start: 16px; inset-block-end: 16px; z-index: 1000; display:none; }
 body.screen .floating-audio.show { display:block; }
+
+/* ===== شاشة العرض 2 (2304×540) ===== */
+body.screen2 header { display: none; }
+body.screen2 footer { display: none; }
+body.screen2 #settings { display: none; }
+body.screen2 .container { grid-template-columns: 1fr; padding: 12px 24px; }
+body.screen2 .hero { min-height: calc(100vh - 24px); display:grid; align-content:center; gap: 8px; padding: 8px 16px; }
+body.screen2 .next-title { display:none; }
+body.screen2 #todayGrid { display:none; }
+body.screen2 .next-prayer { gap: 16px; }
+body.screen2 .next-prayer-name { font-size: clamp(40px, 8.5vw, 120px); }
+body.screen2 .next-prayer-time { font-size: clamp(18px, 4.5vw, 48px); }
+body.screen2 .countdown { font-size: clamp(48px, 10vw, 160px); }
+body.screen2 .phase { font-size: clamp(20px, 4vw, 48px); }
+body.screen2 .progress { height: 8px; width: 100%; }
+body.screen2 .floating-audio.show { display:block; }
