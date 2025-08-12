@@ -406,6 +406,9 @@ function initControls(){
     }
     window.open(location.pathname + '?' + params.toString(), '_blank');
   };
+  el('copyScreenLink').onclick = async ()=>{ const url = buildScreenUrl(1); await copyToClipboard(url); };
+  el('copyScreen2Link').onclick = async ()=>{ const url = buildScreenUrl(2); await copyToClipboard(url); };
+
   el('openScreen2').onclick = ()=>{
     const params = new URLSearchParams({ screen:'2', autoplay:'1' });
     if(state.cloud.enabled){
@@ -581,7 +584,8 @@ async function testCloudMedia(){
       results.push(urlStatusLine(t.label, url, ok, statusText));
     }
     const roomLine = `Room: ${state.cloud.roomId || 'Media_Office'}  |  Bucket: ${(state.cloud.config||{}).storageBucket || '(auto)'}`;
-    const joined = roomLine + '\n' + results.join('\n');
+    const s1 = buildScreenUrl(1); const s2 = buildScreenUrl(2);
+    const joined = roomLine + '\n' + results.join('\n') + '\n\nروابط جاهزة:\n- شاشة 1: ' + s1 + '\n- شاشة 2: ' + s2;
     console.log(joined);
     if(out){ out.textContent = joined; }
     cloudStatus('اختبار الوسائط اكتمل');
