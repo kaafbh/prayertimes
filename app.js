@@ -109,7 +109,7 @@ async function migrateIfNeeded(){
 }
 
 function renderTable(){ const tb = el('scheduleTable')?.querySelector('tbody'); if(!tb) return; tb.innerHTML=''; const dates=Object.keys(state.schedule).sort(); for(const d of dates){ const r=state.schedule[d]; const tr=document.createElement('tr'); tr.innerHTML = `<td>${d}</td>` + PRAYERS.map(p=>`<td>${r[p]||'—'}</td>`).join(''); tb.appendChild(tr); } }
-function renderTodayPills(){ const grid = el('todayGrid'); if(!grid) return; grid.innerHTML=''; const todayKey=toKey(todayLocal()); const row=state.schedule[todayKey]; for(const p of PRAYERS){ const div=document.createElement('div'); div.className='pill'; const timeStr=row?row[p]:'—'; const dt=row?parseTimeToDate(todayKey, timeStr, state.ui.tzOffset):null; div.innerHTML = `<div class="label">${DISPLAY[p]}</div><div class="value">${fmtClock(dt||'—', state.ui.timeFormat)}</div>`; grid.appendChild(div); } }
+function renderTodayPills(){ const grid = el('todayGrid'); if(!grid) return; grid.innerHTML=''; const todayKey=toKey(todayLocal()); const row=state.schedule[todayKey]; for(const p of PRAYERS){ const div=document.createElement('div'); div.className='pill'; const timeStr=row?row[p]:'—'; const dt=row?parseTimeToDate(todayKey, timeStr, state.ui.tzOffset):null; div.innerHTML = `<div class=\"label\">${DISPLAY[p]}</div><div class=\"value\">${fmtClock(dt||'—', state.ui.timeFormat)}</div>`; grid.appendChild(div); } }
 
 let bgUrl = null;
 async function loadBgFromStore(){
