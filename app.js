@@ -374,7 +374,7 @@ function initControls(){
   el('roomId').value = state.cloud.roomId || 'Media_Office';
   const cfg = state.cloud.config||{}; el('fb_apiKey').value = cfg.apiKey||''; el('fb_authDomain').value=cfg.authDomain||''; el('fb_databaseURL').value=cfg.databaseURL||''; el('fb_storageBucket').value=cfg.storageBucket||'';
 
-  el('fbConnect').onclick = ()=>{ state.cloud.config = { apiKey:el('fb_apiKey').value.trim(), authDomain:el('fb_authDomain').value.trim(), databaseURL:el('fb_databaseURL').value.trim(), storageBucket:normalizeBucket(el('fb_storageBucket').value.trim()) }; saveLS('ptt_cloud', state.cloud); if(initFirebase()) cloudStatus('جاهز'); };
+  el('fbConnect').onclick = ()=>{ state.cloud.config = { apiKey:el('fb_apiKey').value.trim(), authDomain:el('fb_authDomain').value.trim(), databaseURL:el('fb_databaseURL').value.trim(), storageBucket:el('fb_storageBucket').value.trim() }; saveLS('ptt_cloud', state.cloud); if(initFirebase()) cloudStatus('جاهز'); };
   el('fbLogin').onclick = ()=>{ state.cloud.email = el('fb_email').value.trim(); state.cloud.password = el('fb_password').value; saveLS('ptt_cloud', state.cloud); fbLogin(); };
   el('fbLogout').onclick = fbLogout;
   el('fbTest').onclick = ()=>{ if(!initFirebase()) return; try{ const testRef = fb.db.ref(getRefs().base+'/ping'); testRef.set(Date.now()).then(()=> cloudStatus('اتصال قاعدة البيانات OK (كتابة)')).catch(e=> cloudStatus('اتصال القراءة OK — الكتابة فشلت: '+(e?.code||e?.message))); }catch(e){ cloudStatus('فشل الاختبار'); } };
