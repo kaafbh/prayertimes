@@ -16,16 +16,16 @@ input[type=color]{padding:0;height:40px}button{appearance:none;border:none;backg
 .stack{display:grid;gap:8px}.toolbar{display:flex;gap:8px;flex-wrap:wrap}.dropzone{border:1.5px dashed rgba(255,255,255,.35);border-radius:12px;padding:14px;text-align:center;background:rgba(255,255,255,.04)}.hidden{display:none!important}details{background:rgba(255,255,255,.04);padding:10px;border-radius:12px;border:1px solid rgba(255,255,255,.08)}summary{cursor:pointer}pre{white-space:pre-wrap;word-break:break-word;background:rgba(0,0,0,.35);padding:8px;border-radius:8px}
 body.screen header,body.screen footer{display:none}body.screen .container{grid-template-columns:1fr;padding:20px}body.screen #settings{display:none}body.screen .hero{min-height:calc(100vh - 40px);display:grid;align-content:center;gap:24px}body.screen .next-prayer-name{font-size:clamp(36px,8vw,72px)}body.screen .countdown{font-size:clamp(40px,12vw,120px)}body.screen .next-prayer-time{font-size:clamp(18px,4vw,28px)}
 .floating-audio{position:fixed;inset-inline-start:16px;inset-block-end:16px;z-index:1000;display:none}body.screen .floating-audio.show{display:block}
-/* Screen 2 (2304x540 banner) */ 
+/* Screen 2 (2304x540 banner) — extra compact vertical spacing */ 
 body.screen2 header,body.screen2 footer,body.screen2 #settings{display:none}
-body.screen2 .container{grid-template-columns:1fr;padding:12px 24px}
-body.screen2 .hero{min-height:calc(100vh - 24px);display:grid;align-content:center;gap:8px;padding:8px 16px}
+body.screen2 .container{grid-template-columns:1fr;padding:0 8px}
+body.screen2 .hero{min-height:100vh;display:grid;align-content:center;gap:2px;padding:0 6px}
 body.screen2 .next-title{display:none}
 body.screen2 #todayGrid{display:none}
-body.screen2 .next-prayer{gap:16px}
-body.screen2 .next-prayer-name{font-size:clamp(40px,8.5vw,120px)}
-body.screen2 .next-prayer-time{font-size:clamp(18px,4.5vw,48px)}
-body.screen2 .countdown{font-size:clamp(48px,10vw,160px)}
-body.screen2 .phase{font-size:clamp(20px,4vw,48px)}
-body.screen2 .progress{height:8px;width:100%}
+body.screen2 .next-prayer{gap:10px;margin:0;align-items:center}
+body.screen2 .next-prayer-name{font-size:clamp(40px,8.2vw,118px);margin:0;line-height:1.02}
+body.screen2 .next-prayer-time{font-size:clamp(18px,4.4vw,46px);margin:0;line-height:1.02}
+body.screen2 .countdown{font-size:clamp(48px,9.8vw,158px);margin:0;line-height:1.0}
+body.screen2 .phase{font-size:clamp(20px,3.8vw,46px);margin:0;line-height:1.02}
+body.screen2 .progress{height:8px;width:100%;margin:0}
 body.screen2 .floating-audio.show{display:block}
