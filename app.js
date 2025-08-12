@@ -334,12 +334,23 @@ async function uploadToStorage(file, key){
     const room = (state.cloud.roomId||'Media_Office').replace(/[^a-zA-Z0-9_-]/g,'-');
     const path = `rooms/${room}/${key}`;
     const ref = fb.storage.ref().child(path);
+    const infoLine = `رفع → bucket=${(state.cloud.config||{}).storageBucket||'(auto)'} | path=${path}`;
+    console.log(infoLine);
+    const out = document.getElementById('testOutput'); if(out){ out.textContent = (out.textContent? out.textContent+'\n':'') + infoLine; }
     const snap = await ref.put(file);
     const url = await snap.ref.getDownloadURL();
     await fb.db.ref(getRefs().media).update({[key+'Url']: url});
+    const okLine = `تم الرفع وكتابة الرابط: ${key}Url = ${url}`;
+    console.log(okLine);
+    if(out){ out.textContent += '\n' + okLine; }
     cloudStatus('مرفوع إلى السحابة');
     return url;
-  }catch(e){ alert('فشل رفع الملف للسحابة: '+e.message); return null; }
+  }catch(e){
+    console.warn('Storage upload failed', e);
+    const out = document.getElementById('testOutput'); if(out){ out.textContent = (out.textContent? out.textContent+'\n':'') + 'فشل الرفع: ' + (e && (e.message||e.code) || e); }
+    alert('فشل رفع الملف للسحابة: '+(e && (e.message||e.code) || e));
+    return null;
+  }
 }
 
 function initControls(){
@@ -536,6 +547,51 @@ function initControls(){
     ok('sanitizeScheduleForFirebase', Object.keys(clean).length===1 && clean['2025-08-10']);
     el('testOutput').textContent = lines.join('\n');
   };
+
+  
+function urlStatusLine(name, url, ok, status){
+  return `${ok ? '✅' : '❌'} ${name}: ${url || '(لا يوجد رابط)'}${status ? ' — ' + status : ''}`;
+}
+async function testCloudMedia(){
+  try{
+    if(!initFirebase()) { alert('Firebase غير مهيّأ'); return; }
+    const out = document.getElementById('testOutput'); if(out) out.textContent = 'جارِ اختبار وسائط السحابة...\n';
+    const refs = getRefs();
+    const snap = await fb.db.ref(refs.media).once('value');
+    const media = snap.val() || {};
+    const results = [];
+    const tests = [
+      {k:'athanUrl', label:'رابط الأذان', apply: (u)=>{ if(u) { try{ audioAthan.src = u; }catch{} } }},
+      {k:'iqamaUrl', label:'رابط الإقامة', apply: (u)=>{ if(u) { try{ audioIqama.src = u; }catch{} } }},
+      {k:'bgUrl', label:'رابط الخلفية', apply: (u)=>{ if(u) { try{ document.body.style.backgroundImage = `url(${u})`; }catch{} } }},
+    ];
+    for(const t of tests){
+      const url = media[t.k] || '';
+      let ok=false, statusText='';
+      if(url){
+        try{
+          const res = await fetch(url, {method:'GET', mode:'cors'});
+          ok = res.ok;
+          statusText = `HTTP ${res.status}`;
+        }catch(e){
+          ok = false; statusText = e && (e.message || e.code) || 'fetch error';
+        }
+        try{ t.apply(url); }catch{}
+      }
+      results.push(urlStatusLine(t.label, url, ok, statusText));
+    }
+    const roomLine = `Room: ${state.cloud.roomId || 'Media_Office'}  |  Bucket: ${(state.cloud.config||{}).storageBucket || '(auto)'}`;
+    const joined = roomLine + '\n' + results.join('\n');
+    console.log(joined);
+    if(out){ out.textContent = joined; }
+    cloudStatus('اختبار الوسائط اكتمل');
+  }catch(e){
+    console.warn('Media test error', e);
+    const out = document.getElementById('testOutput'); if(out){ out.textContent = 'Media test error: ' + (e && (e.message||e.code) || e); }
+  }
+}
+
+  el('fbMediaTest').onclick = testCloudMedia;
 
   el('showUsage').onclick = async()=>{
     const lsBytes = new Blob([JSON.stringify(localStorage)]).size;
