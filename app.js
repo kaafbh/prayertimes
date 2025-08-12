@@ -10,6 +10,35 @@ const SCREEN = SCREEN_MODE === '1';
 const SCREEN2 = SCREEN_MODE === '2';
 const AUTO_AUDIO = qs.get('autoplay') === '1' || qs.get('autoaudio') === '1';
 
+// === Link builders & clipboard helpers (global) ===
+function buildScreenUrl(which){
+  const params = new URLSearchParams({ screen: String(which), autoplay:'1' });
+  if(state.cloud && state.cloud.enabled){
+    params.set('cloud','1');
+    params.set('room', state.cloud.roomId || 'Media_Office');
+    const c = state.cloud.config || {};
+    if(c.apiKey) params.set('apiKey', c.apiKey);
+    if(c.authDomain) params.set('authDomain', c.authDomain);
+    if(c.databaseURL) params.set('databaseURL', c.databaseURL);
+    if(c.storageBucket) params.set('storageBucket', c.storageBucket);
+  }
+  return location.origin + location.pathname + '?' + params.toString();
+}
+async function copyToClipboard(text){
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    status('تم نسخ الرابط للحافظة');
+  }catch(e){
+    alert('تعذّر نسخ الرابط تلقائيًا. انسخه يدويًا:\n' + text);
+  }
+}
+// === end helpers ===
+
 if (SCREEN2) { document.body.classList.add('screen2'); }
 else if (SCREEN) { document.body.classList.add('screen'); }
 
@@ -250,7 +279,7 @@ function updateFloatingAudio(){ const fa=el('floatingAudio'); if(!fa) return; if
 
 function applyTheme(){ document.body.style.setProperty('--accent', state.ui.colors.accent); document.body.style.setProperty('--accent-2', state.ui.colors.accent2); document.body.style.setProperty('--bg', state.ui.colors.bg); document.body.style.setProperty('--text', state.ui.colors.text); document.body.style.setProperty('--phase-athan', state.ui.colors.phaseAthan||'#60a5fa'); document.body.style.setProperty('--phase-iqama', state.ui.colors.phaseIqama||'#fbbf24'); document.body.style.setProperty('--phase-grace', state.ui.colors.phaseGrace||'#a8b3cf'); document.body.style.fontFamily = state.ui.font; if(state.ui.googleFontUrl){ el('googleFontLink').href = state.ui.googleFontUrl; } loadBgFromStore(); }
 
-function normalizeBucket(b){ if(!b) return b; return /\.firebasestorage\.app$/i.test(b) ? b.replace(/\.firebasestorage\.app$/i, '.appspot.com') : b; }
+function normalizeBucket(b){ return b || ''; }
 function applyUrlParams(params){
   try{
     const p = params || new URLSearchParams(location.search);
@@ -260,7 +289,6 @@ function applyUrlParams(params){
     const cfg = {...(state.cloud.config||{})};
     const map = { apiKey:['apiKey','fb_apiKey'], authDomain:['authDomain','fb_authDomain'], databaseURL:['databaseURL','fb_databaseURL'], storageBucket:['storageBucket','fb_storageBucket'] };
     for(const k in map){ for(const key of map[k]){ const v = p.get(key); if(v){ cfg[k]=v; break; } } }
-    if(cfg.storageBucket) cfg.storageBucket = normalizeBucket(cfg.storageBucket);
     if(Object.keys(cfg).length) state.cloud.config = cfg;
     const email = p.get('email'); const pass = p.get('password') || p.get('pass');
     if(email && pass){ state.cloud.email=email; state.cloud.password=pass; }
@@ -385,7 +413,7 @@ function initControls(){
   el('roomId').value = state.cloud.roomId || 'Media_Office';
   const cfg = state.cloud.config||{}; el('fb_apiKey').value = cfg.apiKey||''; el('fb_authDomain').value=cfg.authDomain||''; el('fb_databaseURL').value=cfg.databaseURL||''; el('fb_storageBucket').value=cfg.storageBucket||'';
 
-  el('fbConnect').onclick = ()=>{ state.cloud.config = { apiKey:el('fb_apiKey').value.trim(), authDomain:el('fb_authDomain').value.trim(), databaseURL:el('fb_databaseURL').value.trim(), storageBucket:el('fb_storageBucket').value.trim() }; saveLS('ptt_cloud', state.cloud); if(initFirebase()) cloudStatus('جاهز'); };
+  el('fbConnect').onclick = ()=>{ state.cloud.config = { apiKey:el('fb_apiKey').value.trim(), authDomain:el('fb_authDomain').value.trim(), databaseURL:el('fb_databaseURL').value.trim(), storageBucket:normalizeBucket(el('fb_storageBucket').value.trim()) }; saveLS('ptt_cloud', state.cloud); if(initFirebase()) cloudStatus('جاهز'); };
   el('fbLogin').onclick = ()=>{ state.cloud.email = el('fb_email').value.trim(); state.cloud.password = el('fb_password').value; saveLS('ptt_cloud', state.cloud); fbLogin(); };
   el('fbLogout').onclick = fbLogout;
   el('fbTest').onclick = ()=>{ if(!initFirebase()) return; try{ const testRef = fb.db.ref(getRefs().base+'/ping'); testRef.set(Date.now()).then(()=> cloudStatus('اتصال قاعدة البيانات OK (كتابة)')).catch(e=> cloudStatus('اتصال القراءة OK — الكتابة فشلت: '+(e?.code||e?.message))); }catch(e){ cloudStatus('فشل الاختبار'); } };
@@ -406,9 +434,6 @@ function initControls(){
     }
     window.open(location.pathname + '?' + params.toString(), '_blank');
   };
-  el('copyScreenLink').onclick = async ()=>{ const url = buildScreenUrl(1); await copyToClipboard(url); };
-  el('copyScreen2Link').onclick = async ()=>{ const url = buildScreenUrl(2); await copyToClipboard(url); };
-
   el('openScreen2').onclick = ()=>{
     const params = new URLSearchParams({ screen:'2', autoplay:'1' });
     if(state.cloud.enabled){
@@ -422,6 +447,8 @@ function initControls(){
     }
     window.open(location.pathname + '?' + params.toString(), '_blank');
   };
+  el('copyScreenLink').onclick = async ()=>{ const url = buildScreenUrl(1); await copyToClipboard(url); };
+  el('copyScreen2Link').onclick = async ()=>{ const url = buildScreenUrl(2); await copyToClipboard(url); };
 
   el('openSettings').onclick = ()=>{
     el('settings').classList.toggle('hidden');
@@ -551,52 +578,6 @@ function initControls(){
     el('testOutput').textContent = lines.join('\n');
   };
 
-  
-function urlStatusLine(name, url, ok, status){
-  return `${ok ? '✅' : '❌'} ${name}: ${url || '(لا يوجد رابط)'}${status ? ' — ' + status : ''}`;
-}
-async function testCloudMedia(){
-  try{
-    if(!initFirebase()) { alert('Firebase غير مهيّأ'); return; }
-    const out = document.getElementById('testOutput'); if(out) out.textContent = 'جارِ اختبار وسائط السحابة...\n';
-    const refs = getRefs();
-    const snap = await fb.db.ref(refs.media).once('value');
-    const media = snap.val() || {};
-    const results = [];
-    const tests = [
-      {k:'athanUrl', label:'رابط الأذان', apply: (u)=>{ if(u) { try{ audioAthan.src = u; }catch{} } }},
-      {k:'iqamaUrl', label:'رابط الإقامة', apply: (u)=>{ if(u) { try{ audioIqama.src = u; }catch{} } }},
-      {k:'bgUrl', label:'رابط الخلفية', apply: (u)=>{ if(u) { try{ document.body.style.backgroundImage = `url(${u})`; }catch{} } }},
-    ];
-    for(const t of tests){
-      const url = media[t.k] || '';
-      let ok=false, statusText='';
-      if(url){
-        try{
-          const res = await fetch(url, {method:'GET', mode:'cors'});
-          ok = res.ok;
-          statusText = `HTTP ${res.status}`;
-        }catch(e){
-          ok = false; statusText = e && (e.message || e.code) || 'fetch error';
-        }
-        try{ t.apply(url); }catch{}
-      }
-      results.push(urlStatusLine(t.label, url, ok, statusText));
-    }
-    const roomLine = `Room: ${state.cloud.roomId || 'Media_Office'}  |  Bucket: ${(state.cloud.config||{}).storageBucket || '(auto)'}`;
-    const s1 = buildScreenUrl(1); const s2 = buildScreenUrl(2);
-    const joined = roomLine + '\n' + results.join('\n') + '\n\nروابط جاهزة:\n- شاشة 1: ' + s1 + '\n- شاشة 2: ' + s2;
-    console.log(joined);
-    if(out){ out.textContent = joined; }
-    cloudStatus('اختبار الوسائط اكتمل');
-  }catch(e){
-    console.warn('Media test error', e);
-    const out = document.getElementById('testOutput'); if(out){ out.textContent = 'Media test error: ' + (e && (e.message||e.code) || e); }
-  }
-}
-
-  el('fbMediaTest').onclick = testCloudMedia;
-
   el('showUsage').onclick = async()=>{
     const lsBytes = new Blob([JSON.stringify(localStorage)]).size;
     const a = await idbGet('ptt_audioAthan');
@@ -605,6 +586,51 @@ async function testCloudMedia(){
     const idbBytes = (a?.size||0)+(q?.size||0)+(b?.size||0);
     el('testOutput').textContent = `LocalStorage≈ ${lsBytes} bytes; IndexedDB media≈ ${idbBytes} bytes`;
   };
+
+  // Cloud media test
+  function urlStatusLine(name, url, ok, status){
+    return `${ok ? '✅' : '❌'} ${name}: ${url || '(لا يوجد رابط)'}${status ? ' — ' + status : ''}`;
+  }
+  async function testCloudMedia(){
+    try{
+      if(!initFirebase()) { alert('Firebase غير مهيّأ'); return; }
+      const out = document.getElementById('testOutput'); if(out) out.textContent = 'جارِ اختبار وسائط السحابة...\n';
+      const refs = getRefs();
+      const snap = await fb.db.ref(refs.media).once('value');
+      const media = snap.val() || {};
+      const results = [];
+      const tests = [
+        {k:'athanUrl', label:'رابط الأذان', apply: (u)=>{ if(u) { try{ audioAthan.src = u; }catch{} } }},
+        {k:'iqamaUrl', label:'رابط الإقامة', apply: (u)=>{ if(u) { try{ audioIqama.src = u; }catch{} } }},
+        {k:'bgUrl', label:'رابط الخلفية', apply: (u)=>{ if(u) { try{ document.body.style.backgroundImage = `url(${u})`; }catch{} } }},
+      ];
+      for(const t of tests){
+        const url = media[t.k] || '';
+        let ok=false, statusText='';
+        if(url){
+          try{
+            const res = await fetch(url, {method:'GET', mode:'cors'});
+            ok = res.ok;
+            statusText = `HTTP ${res.status}`;
+          }catch(e){
+            ok = false; statusText = e && (e.message || e.code) || 'fetch error';
+          }
+          try{ t.apply(url); }catch{}
+        }
+        results.push(urlStatusLine(t.label, url, ok, statusText));
+      }
+      const roomLine = `Room: ${state.cloud.roomId || 'Media_Office'}  |  Bucket: ${(state.cloud.config||{}).storageBucket || '(auto)'}`;
+      const s1 = buildScreenUrl(1); const s2 = buildScreenUrl(2);
+      const joined = roomLine + '\n' + results.join('\n') + '\n\nروابط جاهزة:\n- شاشة 1: ' + s1 + '\n- شاشة 2: ' + s2;
+      console.log(joined);
+      if(out){ out.textContent = joined; }
+      cloudStatus('اختبار الوسائط اكتمل');
+    }catch(e){
+      console.warn('Media test error', e);
+      const out = document.getElementById('testOutput'); if(out){ out.textContent = 'Media test error: ' + (e && (e.message||e.code) || e); }
+    }
+  }
+  el('fbMediaTest').onclick = testCloudMedia;
 
   el('pushAll').onclick = ()=>{ pushToCloud({schedule:true, offsets:true, ui:true}); };
   el('pullAll').onclick = ()=>{
@@ -630,7 +656,6 @@ async function testCloudMedia(){
     const cfg = {...(state.cloud.config||{})};
     const map = { apiKey:['apiKey','fb_apiKey'], authDomain:['authDomain','fb_authDomain'], databaseURL:['databaseURL','fb_databaseURL'], storageBucket:['storageBucket','fb_storageBucket'] };
     for(const k in map){ for(const key of map[k]){ const v = p.get(key); if(v){ cfg[k]=v; break; } } }
-    if(cfg.storageBucket) cfg.storageBucket = /\.firebasestorage\.app$/i.test(cfg.storageBucket) ? cfg.storageBucket.replace(/\.firebasestorage\.app$/i, '.appspot.com') : cfg.storageBucket;
     if(Object.keys(cfg).length) state.cloud.config=cfg;
     const email = p.get('email'); const pass = p.get('password') || p.get('pass');
     if(email && pass){ state.cloud.email=email; state.cloud.password=pass; }
