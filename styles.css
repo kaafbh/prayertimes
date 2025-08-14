@@ -1,5 +1,5 @@
-:root{--bg:#0b1220;--card:rgba(255,255,255,.06);--card-strong:rgba(255,255,255,.12);--text:#f7f9fc;--muted:#a8b3cf;--accent:#6ee7b7;--accent-2:#60a5fa;--danger:#f87171;--phase-athan:#60a5fa;--phase-iqama:#fbbf24;--phase-grace:#a8b3cf}
-*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--bg) center/cover no-repeat fixed;color:var(--text);font-family:Cairo,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:grid;grid-template-rows:auto 1fr auto;min-height:100vh;direction:rtl}
+:root{--bg:#0b1220;--card:rgba(255,255,255,.06);--card-strong:rgba(255,255,255,.12);--text:#f7f9fc;--muted:#a8b3cf;--accent:#6ee7b7;--accent-2:#60a5fa;--danger:#f87171;--phase-athan:#60a5fa;--phase-iqama:#fbbf24;--phase-grace:#a8b3cf;--bg-normal:#0b1220;--bg-iqama:#1b2a46;--bg-grace:#342a1b}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--bg) center/cover no-repeat fixed;color:var(--text);font-family:Cairo,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:grid;grid-template-rows:auto 1fr auto;min-height:100vh;direction:rtl;transition:background 240ms ease}
 header{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:16px clamp(12px,3vw,32px);background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,0))}
 .brand{display:flex;gap:12px;align-items:center}.brand .logo{width:40px;height:40px;border-radius:12px;background:var(--card-strong);display:grid;place-items:center;font-weight:800}.brand h1{font-size:clamp(18px,2vw,22px);margin:0;font-weight:700;letter-spacing:.3px}.now{font-size:clamp(12px,2vw,14px);color:var(--muted)}
 .container{display:grid;grid-template-columns:1fr;gap:16px;padding:0 clamp(12px,3vw,32px) 24px}@media(min-width:960px){.container{grid-template-columns:1.2fr .8fr;align-items:start}}
@@ -16,7 +16,7 @@ input[type=color]{padding:0;height:40px}button{appearance:none;border:none;backg
 .stack{display:grid;gap:8px}.toolbar{display:flex;gap:8px;flex-wrap:wrap}.dropzone{border:1.5px dashed rgba(255,255,255,.35);border-radius:12px;padding:14px;text-align:center;background:rgba(255,255,255,.04)}.hidden{display:none!important}details{background:rgba(255,255,255,.04);padding:10px;border-radius:12px;border:1px solid rgba(255,255,255,.08)}summary{cursor:pointer}pre{white-space:pre-wrap;word-break:break-word;background:rgba(0,0,0,.35);padding:8px;border-radius:8px}
 body.screen header,body.screen footer{display:none}body.screen .container{grid-template-columns:1fr;padding:20px}body.screen #settings{display:none}body.screen .hero{min-height:calc(100vh - 40px);display:grid;align-content:center;gap:24px}body.screen .next-prayer-name{font-size:clamp(36px,8vw,72px)}body.screen .countdown{font-size:clamp(40px,12vw,120px)}body.screen .next-prayer-time{font-size:clamp(18px,4vw,28px)}
 .floating-audio{position:fixed;inset-inline-start:16px;inset-block-end:16px;z-index:1000;display:none}body.screen .floating-audio.show{display:block}
-/* Screen 2 (2304x540 banner) — extra compact vertical spacing */ 
+/* Screen 2 (2304x540 banner) — compact vertical spacing */
 body.screen2 header,body.screen2 footer,body.screen2 #settings{display:none}
 body.screen2 .container{grid-template-columns:1fr;padding:0 8px}
 body.screen2 .hero{min-height:100vh;display:grid;align-content:center;gap:2px;padding:0 6px}

@@ -49,7 +49,7 @@
 
     <aside class="card settings" id="settings">
       <h2>لوحة التحكم</h2>
-      <div class="small">ارفع جدول الأذان، واضبط فترات الإقامة، والأصوات، والخلفية، والمظهر. يمكن تفعيل المزامنة الفورية (Firebase) بالأسفل.</div>
+      <div class="small">ارفع جدول الأذان، واضبط فترات الإقامة، والأصوات، والخلفية، والمظهر. يمكن تفعيل المزامنة الفورية (Firebase) أدناه.</div>
 
       <div class="row">
         <div class="field">
@@ -83,15 +83,14 @@
 
       <div class="row">
         <div class="field">
-          <label>الألوان</label>
+          <label>ألوان النصوص</label>
           <div class="grid">
             <div class="field"><label>لون مميز</label><input type="color" id="accent" value="#6ee7b7"></div>
             <div class="field"><label>لون مميز 2</label><input type="color" id="accent2" value="#60a5fa"></div>
-            <div class="field"><label>لون الخلفية</label><input type="color" id="bg" value="#0b1220"></div>
             <div class="field"><label>لون النص</label><input type="color" id="textColor" value="#f7f9fc"></div>
-            <div class="field"><label>لون \"حتى الأذان\"</label><input type="color" id="phaseAthanColor" value="#60a5fa"></div>
-            <div class="field"><label>لون \"حتى الإقامة\"</label><input type="color" id="phaseIqamaColor" value="#fbbf24"></div>
-            <div class="field"><label>لون \"الصلاة قائمة\"</label><input type="color" id="phaseGraceColor" value="#a8b3cf"></div>
+            <div class="field"><label>لون "حتى الأذان"</label><input type="color" id="phaseAthanColor" value="#60a5fa"></div>
+            <div class="field"><label>لون "حتى الإقامة"</label><input type="color" id="phaseIqamaColor" value="#fbbf24"></div>
+            <div class="field"><label>لون "الصلاة قائمة"</label><input type="color" id="phaseGraceColor" value="#a8b3cf"></div>
           </div>
         </div>
         <div class="field">
@@ -100,17 +99,22 @@
             <div class="field">
               <label>نوع الخلفية</label>
               <select id="bgMode">
-                <option value="color">لون فقط</option>
+                <option value="color">لون ثابت</option>
+                <option value="phase">ألوان حسب الحالة</option>
                 <option value="image">صورة</option>
               </select>
             </div>
+            <div class="field"><label>لون الخلفية الثابت</label><input type="color" id="bg" value="#0b1220"></div>
+            <div class="field"><label>لون الخلفية (الوضع الطبيعي)</label><input type="color" id="bgNormal" value="#0b1220"></div>
+            <div class="field"><label>لون الخلفية (حتى الإقامة)</label><input type="color" id="bgIqama" value="#1b2a46"></div>
+            <div class="field"><label>لون الخلفية (الصلاة قائمة)</label><input type="color" id="bgGrace" value="#342a1b"></div>
           </div>
           <label style="margin-top:8px">صورة الخلفية</label>
           <input type="file" id="bgImage" accept="image/*" />
           <div class="toolbar">
             <button class="danger ghost" id="clearBg">إزالة الخلفية</button>
           </div>
-          <div class="small">اختر "لون فقط" لاستخدام اللون من Section الألوان بالأعلى، أو "صورة" لعرض صورة الخلفية المخزنة.</div>
+          <div class="small">اختر "ألوان حسب الحالة" لتبديل الخلفية تلقائيًا بين (طبيعي / حتى الإقامة / الصلاة قائمة). اختر "صورة" لاستخدام صورة خلفية.</div>
         </div>
       </div>
 
@@ -158,12 +162,11 @@
               <option value="off">متوقفة</option>
               <option value="on">مفعّلة</option>
             </select>
-            <div class="small">عند التفعيل سيتم إرسال/استقبال الجدول والإعدادات فورًا.</div>
+            <div class="small">عند التفعيل سيتم إرسال/استقبال الجدول والإعدادات والوسائط فورًا.</div>
           </div>
           <div class="field">
-            <label>معرّف القاعة/الغرفة (Room ID)</label>
-            <input type="text" id="roomId" placeholder="مثال: main-hall" value="Media_Office" />
-            <div class="small">استخدم معرفًا مميزًا لمسجدك. شارك نفس المعرف مع شاشة العرض.</div>
+            <label>Room ID</label>
+            <input type="text" id="roomId" placeholder="مثال: Media_Office" value="Media_Office" />
           </div>
         </div>
         <div class="row">
@@ -197,12 +200,12 @@
           </div>
         </div>
         <div class="toolbar">
-          <button id="fbConnect">ربط/تهيئة Firebase</button>
-          <button id="fbLogin" class="ghost">تسجيل الدخول</button>
-          <button id="fbLogout" class="ghost">تسجيل الخروج</button>
+          <button id="fbConnect">تهيئة Firebase</button>
+          <button id="fbLogin" class="ghost">دخول</button>
+          <button id="fbLogout" class="ghost">خروج</button>
           <button id="fbTest" class="ghost">اختبار الاتصال</button>
         </div>
-        <div class="small">الحالة: <span id="cloudStatus">غير متصل</span></div>
+        <div class="small">الحالة: <span id="cloudStatus">غير متصل</span> · الغرفة: <span id="roomBadge">—</span></div>
       </details>
 
       <div class="toolbar" style="margin-top:8px;">
@@ -211,8 +214,9 @@
         <button id="exportWithMedia" class="ghost">تصدير مع الوسائط</button>
         <button id="importData" class="ghost">استيراد نسخة احتياطية</button>
         <button id="resetAll" class="danger">إعادة الضبط الكلي</button>
-        <button id="pushAll" class="ghost">إرسال الكل للسحابة الآن</button>
+        <button id="pushAll" class="ghost">إرسال الكل للسحابة</button>
         <button id="pullAll" class="ghost">سحب من السحابة</button>
+        <button id="pushMedia" class="ghost">رفع الوسائط للسحابة</button>
       </div>
 
       <details>
@@ -221,6 +225,7 @@
           <button id="runTests" class="ghost">تشغيل الاختبارات</button>
           <button id="showUsage" class="ghost">عرض استخدام التخزين</button>
           <button id="fbMediaTest" class="ghost">اختبار وسائط السحابة</button>
+          <button id="fbDiagStorage" class="ghost">تشخيص التخزين</button>
           <button id="clearIDB" class="danger ghost">مسح IndexedDB</button>
         </div>
         <pre id="testOutput" class="small"></pre>
