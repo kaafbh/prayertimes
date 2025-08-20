@@ -6,13 +6,11 @@
   <title>متابعة مواقيت الصلاة</title>
   <link id="googleFontLink" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;800&display=swap">
   <link rel="stylesheet" href="styles.css">
-
   <!-- Firebase (Compat) CDN -->
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -26,7 +24,6 @@
     </div>
     <div class="toolbar">
       <button id="enableAudioBtn" class="ghost">تفعيل الصوت</button>
-      <button id="openSettings" class="ghost">لوحة التحكم</button>
       <button id="openScreen" class="ghost">شاشة العرض</button>
       <button id="openScreen2" class="ghost">شاشة العرض 2 (2304×540)</button>
       <button id="copyScreenLink" class="ghost">نسخ رابط شاشة 1</button>
@@ -35,6 +32,7 @@
   </header>
 
   <main class="container">
+    <!-- واجهة العرض -->
     <section class="card hero" aria-live="polite">
       <div class="next-title">الصلاة القادمة</div>
       <div class="next-prayer">
@@ -43,13 +41,14 @@
       </div>
       <div class="countdown" id="countdown">00:00:00</div>
       <div class="phase" id="phase">حتى الأذان</div>
-      <div class="progress" aria-hidden="true"><div class="bar" id="bar"></div></div>
+      <div class="progress" aria-hidden="true" id="progress"><div class="bar" id="bar"></div></div>
       <div class="grid" id="todayGrid"></div>
     </section>
 
+    <!-- لوحة التحكم -->
     <aside class="card settings" id="settings">
       <h2>لوحة التحكم</h2>
-      <div class="small">ارفع جدول الأذان، واضبط فترات الإقامة، والأصوات، والخلفية، والمظهر. يمكن تفعيل المزامنة الفورية (Firebase) أدناه.</div>
+      <div class="small">ارفع الجدول، واضبط فترات الإقامة، والتنبيهات، والأصوات، والخلفية، والمظهر. البيانات الصغيرة تُحفَظ محليًا، والوسائط الكبيرة في IndexedDB. فعّل المزامنة (Firebase) لتنتقل الإعدادات للشاشات.</div>
 
       <div class="row">
         <div class="field">
@@ -58,7 +57,7 @@
             <div>أسقط الملف هنا أو اختره</div>
             <input type="file" id="scheduleFile" accept=".csv,.json" />
           </div>
-          <div class="small">رؤوس CSV: <code>date,fajr,dhuhr,asr,maghrib,isha</code> أو <code>التاريخ,الفجر,الظهر,العصر,المغرب,العشاء</code> · التاريخ: <code>YYYY-MM-DD</code>.</div>
+          <div class="small">CSV headers: <code>date,fajr,dhuhr,asr,maghrib,isha</code> أو <code>التاريخ,الفجر,الظهر,العصر,المغرب,العشاء</code> · التاريخ: <code>YYYY-MM-DD</code>.</div>
         </div>
         <div class="field">
           <label>مدة الإقامة (بالدقائق بعد الأذان)</label>
@@ -78,12 +77,16 @@
           <input type="number" id="graceMin" min="0" step="1" value="8" />
           <div class="small">خلالها تظهر عبارة «الصلاة قائمة» قبل الانتقال للأذان التالي.</div>
         </div>
-        <div class="field"></div>
+        <div class="field">
+          <label>تنبيه قبل الإقامة (بالدقائق)</label>
+          <input type="number" id="preAlertMin" min="0" step="1" value="5" />
+          <div class="small">عند الوصول لهذا الحد يُشغّل صوت التنبيه ويُفعل نمط تنبيه بصري ويومض الشريط.</div>
+        </div>
       </div>
 
       <div class="row">
         <div class="field">
-          <label>ألوان النصوص</label>
+          <label>ألوان النصوص والخلفية حسب الحالة</label>
           <div class="grid">
             <div class="field"><label>لون مميز</label><input type="color" id="accent" value="#6ee7b7"></div>
             <div class="field"><label>لون مميز 2</label><input type="color" id="accent2" value="#60a5fa"></div>
@@ -91,6 +94,12 @@
             <div class="field"><label>لون "حتى الأذان"</label><input type="color" id="phaseAthanColor" value="#60a5fa"></div>
             <div class="field"><label>لون "حتى الإقامة"</label><input type="color" id="phaseIqamaColor" value="#fbbf24"></div>
             <div class="field"><label>لون "الصلاة قائمة"</label><input type="color" id="phaseGraceColor" value="#a8b3cf"></div>
+            <div class="field"><label>لون "تنبيه قبل الإقامة"</label><input type="color" id="phaseAlertColor" value="#ef4444"></div>
+            <div class="field"><label>لون الخلفية (ثابت)</label><input type="color" id="bg" value="#0b1220"></div>
+            <div class="field"><label>لون الخلفية (الوضع الطبيعي)</label><input type="color" id="bgNormal" value="#0b1220"></div>
+            <div class="field"><label>لون الخلفية (حتى الإقامة)</label><input type="color" id="bgIqama" value="#1b2a46"></div>
+            <div class="field"><label>لون الخلفية (الصلاة قائمة)</label><input type="color" id="bgGrace" value="#342a1b"></div>
+            <div class="field"><label>لون الخلفية (تنبيه قبل الإقامة)</label><input type="color" id="bgAlert" value="#3a1b1b"></div>
           </div>
         </div>
         <div class="field">
@@ -104,17 +113,13 @@
                 <option value="image">صورة</option>
               </select>
             </div>
-            <div class="field"><label>لون الخلفية الثابت</label><input type="color" id="bg" value="#0b1220"></div>
-            <div class="field"><label>لون الخلفية (الوضع الطبيعي)</label><input type="color" id="bgNormal" value="#0b1220"></div>
-            <div class="field"><label>لون الخلفية (حتى الإقامة)</label><input type="color" id="bgIqama" value="#1b2a46"></div>
-            <div class="field"><label>لون الخلفية (الصلاة قائمة)</label><input type="color" id="bgGrace" value="#342a1b"></div>
           </div>
           <label style="margin-top:8px">صورة الخلفية</label>
           <input type="file" id="bgImage" accept="image/*" />
           <div class="toolbar">
             <button class="danger ghost" id="clearBg">إزالة الخلفية</button>
           </div>
-          <div class="small">اختر "ألوان حسب الحالة" لتبديل الخلفية تلقائيًا بين (طبيعي / حتى الإقامة / الصلاة قائمة). اختر "صورة" لاستخدام صورة خلفية.</div>
+          <div class="small">اختر "ألوان حسب الحالة" لتبديل الخلفية تلقائيًا بين (طبيعي / حتى الإقامة / الصلاة قائمة / تنبيه قبل الإقامة). اختر "صورة" لاستخدام صورة خلفية.</div>
         </div>
       </div>
 
@@ -153,6 +158,19 @@
         </div>
       </div>
 
+      <div class="row">
+        <div class="field">
+          <label>صوت التنبيه قبل الإقامة (MP3/WAV)</label>
+          <input type="file" id="alertSound" accept="audio/*" />
+          <div class="toolbar">
+            <button class="ghost" id="testAlert">تجربة</button>
+            <button class="danger ghost" id="clearAlert">حذف</button>
+          </div>
+          <div class="small">يُشغّل تلقائيًا عند تبقّي <span id="preAlertMinLabel">5</span> دقيقة على الإقامة.</div>
+        </div>
+      </div>
+
+      <!-- ==== المزامنة السحابية (Firebase) ==== -->
       <details open>
         <summary>المزامنة السحابية (Firebase)</summary>
         <div class="row">
@@ -205,6 +223,13 @@
           <button id="fbLogout" class="ghost">خروج</button>
           <button id="fbTest" class="ghost">اختبار الاتصال</button>
         </div>
+        <div class="toolbar">
+          <button id="pushAll" class="ghost">إرسال الكل للسحابة</button>
+          <button id="pullAll" class="ghost">سحب من السحابة</button>
+          <button id="pushMedia" class="ghost">رفع الوسائط للسحابة</button>
+          <button id="fbMediaTest" class="ghost">اختبار وسائط السحابة</button>
+          <button id="fbDiagStorage" class="ghost">تشخيص التخزين</button>
+        </div>
         <div class="small">الحالة: <span id="cloudStatus">غير متصل</span> · الغرفة: <span id="roomBadge">—</span></div>
       </details>
 
@@ -214,20 +239,12 @@
         <button id="exportWithMedia" class="ghost">تصدير مع الوسائط</button>
         <button id="importData" class="ghost">استيراد نسخة احتياطية</button>
         <button id="resetAll" class="danger">إعادة الضبط الكلي</button>
-        <button id="pushAll" class="ghost">إرسال الكل للسحابة</button>
-        <button id="pullAll" class="ghost">سحب من السحابة</button>
-        <button id="pushMedia" class="ghost">رفع الوسائط للسحابة</button>
+        <button id="showUsage" class="ghost">عرض استخدام التخزين</button>
+        <button id="runTests" class="ghost">تشغيل الاختبارات</button>
       </div>
 
       <details>
-        <summary>أدوات المطوّر والاختبارات</summary>
-        <div class="toolbar" style="margin-top:8px;">
-          <button id="runTests" class="ghost">تشغيل الاختبارات</button>
-          <button id="showUsage" class="ghost">عرض استخدام التخزين</button>
-          <button id="fbMediaTest" class="ghost">اختبار وسائط السحابة</button>
-          <button id="fbDiagStorage" class="ghost">تشخيص التخزين</button>
-          <button id="clearIDB" class="danger ghost">مسح IndexedDB</button>
-        </div>
+        <summary>سجلّ تشخيص/اختبار</summary>
         <pre id="testOutput" class="small"></pre>
       </details>
 
@@ -250,11 +267,13 @@
     <div>جميع البيانات محفوظة محليًا · <span id="status">جاهز</span></div>
   </footer>
 
+  <!-- زر عائم لتفعيل الصوت في وضع شاشة العرض -->
   <div class="floating-audio" id="floatingAudio">
     <button id="enableAudioFloating">تفعيل الصوت</button>
   </div>
 
   <audio id="audioAthan" preload="auto"></audio>
   <audio id="audioIqama" preload="auto"></audio>
+  <audio id="audioAlert" preload="auto"></audio>
 </body>
 </html>

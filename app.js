@@ -1,4 +1,3 @@
-
 // ======= ثوابت ومساعدات عامة =======
 const PRAYERS = ["Fajr","Dhuhr","Asr","Maghrib","Isha"];
 const DISPLAY = {Fajr:"الفجر", Dhuhr:"الظهر", Asr:"العصر", Maghrib:"المغرب", Isha:"العشاء"};
@@ -10,20 +9,6 @@ const SCREEN_MODE = qs.get('screen') || (qs.has('screen') ? '1' : null);
 const SCREEN = SCREEN_MODE === '1';
 const SCREEN2 = SCREEN_MODE === '2';
 const AUTO_AUDIO = qs.get('autoplay') === '1' || qs.get('autoaudio') === '1';
-
-function buildScreenUrl(which){
-  const params = new URLSearchParams({ screen: String(which), autoplay:'1' });
-  if(state.cloud && state.cloud.enabled){
-    params.set('cloud','1');
-    params.set('room', state.cloud.roomId || 'Media_Office');
-    const c = state.cloud.config || {};
-    if(c.apiKey) params.set('apiKey', c.apiKey);
-    if(c.authDomain) params.set('authDomain', c.authDomain);
-    if(c.databaseURL) params.set('databaseURL', c.databaseURL);
-    if(c.storageBucket) params.set('storageBucket', c.storageBucket);
-  }
-  return location.origin + location.pathname + '?' + params.toString();
-}
 
 if (SCREEN2) { document.body.classList.add('screen2'); }
 else if (SCREEN) { document.body.classList.add('screen'); }
@@ -41,7 +26,7 @@ function parseTimeToDate(dateStr, timeStr, tzOffsetMin=0){
   const arDigits = '٠١٢٣٤٥٦٧٨٩';
   let s = (''+timeStr).trim()
     .replace(/[٠-٩]/g, d => String(arDigits.indexOf(d)))
-    .replace(/\س*ص\s*$/i, ' AM')
+    .replace(/\s*ص\s*$/i, ' AM')
     .replace(/\s*م\s*$/i, ' PM');
   const m = s.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
   if(!m) return null;
@@ -76,15 +61,14 @@ async function idbSet(key, blob){ const db=await getDB(); return new Promise((re
 async function idbGet(key){ const db=await getDB(); return new Promise((res,rej)=>{ const tx=db.transaction('files','readonly'); const rq=tx.objectStore('files').get(key); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error); }); }
 async function idbDelete(key){ const db=await getDB(); return new Promise((res,rej)=>{ const tx=db.transaction('files','readwrite'); tx.objectStore('files').delete(key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
 async function idbClear(){ const db=await getDB(); return new Promise((res,rej)=>{ const tx=db.transaction('files','readwrite'); tx.objectStore('files').clear(); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
-
 function dataURLtoBlob(dataURL){ try{ const [meta,b64]=dataURL.split(','); const mime=(meta.match(/data:(.*?);base64/)||[])[1]||'application/octet-stream'; const bin=atob(b64); const len=bin.length; const arr=new Uint8Array(len); for(let i=0;i<len;i++) arr[i]=bin.charCodeAt(i); return new Blob([arr],{type:mime}); }catch(e){ console.warn('dURL->Blob failed',e); return null; } }
 function blobToDataURL(blob){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=()=>rej(fr.error); fr.readAsDataURL(blob); }); }
 
-const INVALID_KEY_CHARS = /[.#$/\[\]]/g;
+const INVALID_KEY_CHARS = /[.#$\/\[\]]/g;
 function sanitizeDateKey(k){
   if(!k) return null;
   const s = String(k).trim();
-  const m = s.match(/(\d{4})[\-\/_\.\s](\d{2})[\-\/_\.\s](\d{2})/);
+  const m = s.match(/(\d{4})[\-\/_.\s](\d{2})[\-\/_.\s](\d{2})/);
   if(!m) return null;
   const y=m[1], mo=m[2], d=m[3];
   const iso = `${y}-${mo}-${d}`.replace(INVALID_KEY_CHARS,'');
@@ -104,54 +88,38 @@ function sanitizeScheduleForFirebase(sch){
 const state = {
   schedule: loadLS('ptt_schedule', {}),
   offsets: loadLS('ptt_offsets', {Fajr:20,Dhuhr:25,Asr:20,Maghrib:10,Isha:15}),
-  audioFlags: loadLS('ptt_audioFlags', {athan:false, iqama:false}),
+  audioFlags: loadLS('ptt_audioFlags', {athan:false, iqama:false, alert:false}),
   ui: loadLS('ptt_ui', {
     font:"Cairo, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
     googleFontUrl:"",
     colors:{
       accent:'#6ee7b7', accent2:'#60a5fa', text:'#f7f9fc',
-      phaseAthan:'#60a5fa', phaseIqama:'#fbbf24', phaseGrace:'#a8b3cf',
-      bg:'#0b1220', bgNormal:'#0b1220', bgIqama:'#1b2a46', bgGrace:'#342a1b'
+      phaseAthan:'#60a5fa', phaseIqama:'#fbbf24', phaseGrace:'#a8b3cf', phaseAlert:'#ef4444',
+      bg:'#0b1220', bgNormal:'#0b1220', bgIqama:'#1b2a46', bgGrace:'#342a1b', bgAlert:'#3a1b1b'
     },
-    bgImageKey:null, bgMode:'color', timeFormat:'12', tzOffset:0, graceMin:8
+    bgImageKey:null, bgMode:'color', timeFormat:'12', tzOffset:0, graceMin:8, alertMin:5
   }),
   audioEnabled: false,
   phase: 'athan',
   next: null,
-  cloud: loadLS('ptt_cloud', {enabled:false, roomId:'Media_Office', config:{}, signedIn:false})
+  cloud: loadLS('ptt_cloud', {enabled:false, roomId:'Media_Office', config:{}, signedIn:false, email:'', password:''})
 };
 
-// ======= Firebase & تخزين =======
+// ======= Firebase & Cloud =======
 let fb={app:null, auth:null, db:null, storage:null, unsub:null};
 function cloudStatus(msg){ const x=el('cloudStatus'); if(x) x.textContent = msg; }
 function getRoomPath(){ const room = (state.cloud.roomId||'Media_Office').replace(/[^a-zA-Z0-9_-]/g,'-'); return `rooms/${room}`; }
 function getRefs(){ const base=getRoomPath(); return { base, schedule:`${base}/schedule`, offsets:`${base}/offsets`, ui:`${base}/ui`, media:`${base}/media`}; }
-
+function normalizeBucket(b){ return b || ''; }
 function bucketForGS(){
   const b = (state.cloud.config||{}).storageBucket || '';
   if(!b) return '';
   return b.replace(/\.firebasestorage\.app$/i, '.appspot.com');
 }
-function printErrorDetails(prefix, err){
-  const out = document.getElementById('testOutput');
-  const code = err && err.code || '';
-  const msg  = err && (err.message || err.toString()) || String(err);
-  const line = `${prefix}: ${code || ''} ${msg}`.trim();
-  console.warn(line, err);
-  if(out){
-    out.textContent = (out.textContent? out.textContent+'\n':'') + line;
-    try{
-      const more = JSON.stringify({code:err.code, message:err.message, name:err.name}, null, 2);
-      out.textContent += '\n' + more;
-    }catch{}
-  }
-}
-function normalizeBucket(b){ return b || ''; }
-
 function initFirebase(){
   try{
     if(!state.cloud.config || !state.cloud.config.apiKey){ cloudStatus('أدخل إعدادات Firebase أولًا'); return false; }
-    if(typeof window.firebase === 'undefined'){ cloudStatus('سكربتات Firebase لم تُحمَّل بعد'); return false; }
+    if(typeof window.firebase === 'undefined'){ cloudStatus('سكرِبتات Firebase لم تُحمّل'); return false; }
     if(!fb.app){ fb.app = firebase.initializeApp(state.cloud.config); }
     if(!fb.auth) fb.auth=firebase.auth();
     if(!fb.db) fb.db=firebase.database();
@@ -160,20 +128,19 @@ function initFirebase(){
     return true;
   }catch(e){ console.warn('initFirebase failed', e); cloudStatus('فشل التهيئة'); fb={app:null,auth:null,db:null,storage:null,unsub:null}; return false; }
 }
-
 async function fbLogin(){ try{ if(!initFirebase()) return; const {email,password} = state.cloud; await fb.auth.signInWithEmailAndPassword(email, password); cloudStatus('متصل ومُسجّل'); state.cloud.signedIn=true; saveLS('ptt_cloud', state.cloud); if(state.cloud.enabled) subscribeCloud(); }catch(e){ alert('تسجيل الدخول فشل: '+e.message); cloudStatus('فشل تسجيل الدخول'); } }
 async function fbLogout(){ try{ if(fb.auth) await fb.auth.signOut(); state.cloud.signedIn=false; saveLS('ptt_cloud', state.cloud); cloudStatus('غير متصل'); if(fb.unsub){ fb.unsub(); fb.unsub=null; } }catch(e){} }
 
-function subscribeCloud(){
-  if(!initFirebase()) return; if(fb.unsub){ fb.unsub(); fb.unsub=null; }
+function subscribeCloud(){ if(!initFirebase()) return; if(fb.unsub){ fb.unsub(); fb.unsub=null; }
   const r=getRefs(); cloudStatus('متصل (استقبال مباشر)');
   const on = (path, handler)=> fb.db.ref(path).on('value', snap=>{ const val=snap.val(); if(val==null) return; handler(val); });
   on(r.schedule, (v)=>{ state.schedule=sanitizeScheduleForFirebase(v); saveLS('ptt_schedule', state.schedule); renderTable(); renderTodayPills(); });
   on(r.offsets,  (v)=>{ state.offsets=v; saveLS('ptt_offsets', v); });
-  on(r.ui,       (v)=>{ state.ui={...state.ui,...v}; saveLS('ptt_ui', state.ui); applyTheme(true); renderTodayPills(); });
+  on(r.ui,       (v)=>{ state.ui={...state.ui,...v}; saveLS('ptt_ui', state.ui); applyTheme(); setPhaseVisuals(); renderTodayPills(); });
   on(r.media,    (v)=>{
     if(v.athanUrl){ audioAthan.src = v.athanUrl; }
     if(v.iqamaUrl){ audioIqama.src = v.iqamaUrl; }
+    if(v.alertUrl){ audioAlert.src = v.alertUrl; }
     if(v.bgUrl && state.ui.bgMode==='image'){ document.body.style.backgroundImage = `url(${v.bgUrl})`; }
   });
   fb.unsub = ()=>{ fb.db.ref(r.schedule).off(); fb.db.ref(r.offsets).off(); fb.db.ref(r.ui).off(); fb.db.ref(r.media).off(); cloudStatus('تم إيقاف الاستقبال'); };
@@ -196,6 +163,7 @@ async function pullFromCloud(){
     const m = media.val()||{};
     if(m.athanUrl) audioAthan.src=m.athanUrl;
     if(m.iqamaUrl) audioIqama.src=m.iqamaUrl;
+    if(m.alertUrl) audioAlert.src=m.alertUrl;
     if(m.bgUrl && state.ui.bgMode==='image') document.body.style.backgroundImage=`url(${m.bgUrl})`;
     cloudStatus('تم السحب من السحابة');
     return true;
@@ -207,35 +175,41 @@ async function pullFromCloud(){
 }
 
 // ======= خلفية بحسب الحالة =======
+let preAlertActive=false;
 function applyPhaseBackground(){
   if(state.ui.bgMode==='image'){ return; }
   let color = state.ui.colors.bg;
   if(state.ui.bgMode==='phase'){
-    if(state.phase==='athan') color = state.ui.colors.bgNormal || state.ui.colors.bg;
+    if(preAlertActive) color = state.ui.colors.bgAlert || state.ui.colors.bg;
+    else if(state.phase==='athan') color = state.ui.colors.bgNormal || state.ui.colors.bg;
     else if(state.phase==='iqama') color = state.ui.colors.bgIqama || state.ui.colors.bg;
     else color = state.ui.colors.bgGrace || state.ui.colors.bg;
+  } else if(state.ui.bgMode==='color'){
+    color = state.ui.colors.bg;
   }
   document.body.style.backgroundImage = '';
   document.body.style.background = color;
 }
 
-function applyTheme(fromCloud=false){
-  document.body.style.setProperty('--accent', state.ui.colors.accent);
-  document.body.style.setProperty('--accent-2', state.ui.colors.accent2);
-  document.body.style.setProperty('--text', state.ui.colors.text);
-  document.body.style.setProperty('--phase-athan', state.ui.colors.phaseAthan||'#60a5fa');
-  document.body.style.setProperty('--phase-iqama', state.ui.colors.phaseIqama||'#fbbf24');
-  document.body.style.setProperty('--phase-grace', state.ui.colors.phaseGrace||'#a8b3cf');
-  document.body.style.setProperty('--bg-normal', state.ui.colors.bgNormal||'#0b1220');
-  document.body.style.setProperty('--bg-iqama', state.ui.colors.bgIqama||'#1b2a46');
-  document.body.style.setProperty('--bg-grace', state.ui.colors.bgGrace||'#342a1b');
-  document.body.style.fontFamily = state.ui.font;
-  if(state.ui.googleFontUrl){ el('googleFontLink').href = state.ui.googleFontUrl; }
-
+function applyTheme(){
+  const c = state.ui.colors || {};
+  document.body.style.setProperty('--accent', c.accent||'#6ee7b7');
+  document.body.style.setProperty('--accent-2', c.accent2||'#60a5fa');
+  document.body.style.setProperty('--text', c.text||'#f7f9fc');
+  document.body.style.setProperty('--phase-athan', c.phaseAthan||'#60a5fa');
+  document.body.style.setProperty('--phase-iqama', c.phaseIqama||'#fbbf24');
+  document.body.style.setProperty('--phase-grace', c.phaseGrace||'#a8b3cf');
+  document.body.style.setProperty('--phase-alert', c.phaseAlert||'#ef4444');
+  document.body.style.setProperty('--bg-normal', c.bgNormal||'#0b1220');
+  document.body.style.setProperty('--bg-iqama', c.bgIqama||'#1b2a46');
+  document.body.style.setProperty('--bg-grace', c.bgGrace||'#342a1b');
+  document.body.style.setProperty('--bg-alert', c.bgAlert||'#3a1b1b');
+  document.body.style.setProperty('--bg', c.bg||'#0b1220');
+  document.body.style.fontFamily = state.ui.font || 'Cairo, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  if(state.ui.googleFontUrl){ const link = document.getElementById('googleFontLink'); if(link) link.href = state.ui.googleFontUrl; }
   if(state.ui.bgMode==='image'){
     loadBgFromStore();
   } else {
-    if(state.ui.bgMode==='color'){ document.body.style.setProperty('--bg', state.ui.colors.bg); }
     applyPhaseBackground();
   }
 }
@@ -283,7 +257,7 @@ async function loadBgFromStore(){
   }catch(e){ console.warn('load bg failed',e); }
 }
 
-// ======= حساب القادم =======
+// ======= الحساب =======
 function todayLocal(){ const n=new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
 function toKey(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 function findNext(){
@@ -297,7 +271,8 @@ function findNext(){
       sequence.push({day:todayKey,prayerName:p,athanAt,iqamaAt});
     }
   }
-  const nextDay=new Date(todayLocal()); nextDay.setDate(nextDay.getDate()+1); const nextKey=toKey(nextDay); const nextRow=state.schedule[nextKey];
+  const nextDay=new Date(todayLocal()); nextDay.setDate(nextDay.getDate()+1);
+  const nextKey=toKey(nextDay); const nextRow=state.schedule[nextKey];
   if(nextRow){
     for(const p of PRAYERS){
       const t=nextRow[p]; if(!t) continue;
@@ -315,17 +290,41 @@ function findNext(){
   }
   return sequence[0]||null;
 }
+
+let timer=null; let lastPhaseKey=''; let lastPreAlertKey='';
 function setPhaseVisuals(){
   const ph = el('phase'); if(!ph) return;
-  ph.classList.remove('phase-athan','phase-iqama','phase-grace');
+  ph.classList.remove('phase-athan','phase-iqama','phase-grace','phase-prealert');
   if(state.phase==='athan') ph.classList.add('phase-athan');
   else if(state.phase==='iqama') ph.classList.add('phase-iqama');
   else ph.classList.add('phase-grace');
+  if(preAlertActive) ph.classList.add('phase-prealert');
+  // وميض الشريط
+  const prog = el('progress');
+  if(prog){
+    if(preAlertActive) prog.classList.add('prealert'); else prog.classList.remove('prealert');
+  }
   applyPhaseBackground();
 }
 
-// ======= العداد =======
-let timer=null; let lastPhaseKey='';
+// ======= الصوت =======
+const audioAthan = document.getElementById('audioAthan'); const audioIqama = document.getElementById('audioIqama'); const audioAlert = document.getElementById('audioAlert');
+let athanUrl=null, iqamaUrl=null, alertUrl=null;
+async function loadAudios(){
+  try{
+    const a=await idbGet('ptt_audioAthan'); if(athanUrl){ URL.revokeObjectURL(athanUrl); athanUrl=null; }
+    if(a){ athanUrl=URL.createObjectURL(a); audioAthan.src=athanUrl; state.audioFlags.athan=true; } else { audioAthan.removeAttribute('src'); state.audioFlags.athan=false; }
+    const q=await idbGet('ptt_audioIqama'); if(iqamaUrl){ URL.revokeObjectURL(iqamaUrl); iqamaUrl=null; }
+    if(q){ iqamaUrl=URL.createObjectURL(q); audioIqama.src=iqamaUrl; state.audioFlags.iqama=true; } else { audioIqama.removeAttribute('src'); state.audioFlags.iqama=false; }
+    const z=await idbGet('ptt_audioAlert'); if(alertUrl){ URL.revokeObjectURL(alertUrl); alertUrl=null; }
+    if(z){ alertUrl=URL.createObjectURL(z); audioAlert.src=alertUrl; state.audioFlags.alert=true; } else { audioAlert.removeAttribute('src'); state.audioFlags.alert=false; }
+    saveLS('ptt_audioFlags', state.audioFlags);
+  }catch(e){ console.warn('loadAudios failed',e); }
+}
+function enableAudio(){ state.audioEnabled=true; [audioAthan,audioIqama,audioAlert].forEach(a=>{ a.muted=true; a.play().catch(()=>{}).finally(()=>{ a.pause(); a.currentTime=0; a.muted=false; }); }); status('تم تفعيل الصوت'); updateFloatingAudio(); }
+function updateFloatingAudio(){ const fa=el('floatingAudio'); if(!fa) return; if((SCREEN || SCREEN2) && !state.audioEnabled) fa.classList.add('show'); else fa.classList.remove('show'); }
+
+// ======= المؤقت =======
 function start(){
   if(timer) clearInterval(timer);
   loadAudios(); renderTable(); renderTodayPills();
@@ -343,7 +342,19 @@ function start(){
     const target=(state.phase==='athan')?athanAt:(state.phase==='iqama'?iqamaAt:graceEnd); const until=target.getTime()-now.getTime();
     el('nextPrayerName').textContent = DISPLAY[name]||name;
     el('nextPrayerClock').textContent = fmtClock(athanAt, state.ui.timeFormat);
-    el('phase').textContent = state.phase==='athan' ? 'حتى الأذان' : (state.phase==='iqama' ? 'حتى الإقامة' : 'الصلاة قائمة'); setPhaseVisuals();
+    el('phase').textContent = state.phase==='athan' ? 'حتى الأذان' : (state.phase==='iqama' ? 'حتى الإقامة' : 'الصلاة قائمة');
+
+    // منطق التنبيه قبل الإقامة
+    const remainToIqama = iqamaAt.getTime()-now.getTime();
+    const alertMs = Math.max(0, (state.ui.alertMin ?? 5) * 60000);
+    const nowPre = (state.phase==='iqama' && remainToIqama>0 && remainToIqama<=alertMs);
+    if(nowPre && lastPreAlertKey !== `${name}-${next.day}-prealert`){
+      if(state.audioEnabled && audioAlert && audioAlert.src){ try{ audioAlert.currentTime=0; audioAlert.play(); }catch{} }
+      lastPreAlertKey = `${name}-${next.day}-prealert`;
+    }
+    preAlertActive = nowPre;
+    setPhaseVisuals();
+
     el('countdown').textContent = fmtDuration(until);
     let totalPhase=0, elapsed=0;
     if(state.phase==='athan'){ const MAX=90*60000; totalPhase=MAX; elapsed=Math.min(MAX, Math.max(0, MAX-until)); }
@@ -351,16 +362,17 @@ function start(){
     else { totalPhase=graceEnd.getTime()-iqamaAt.getTime(); elapsed=Math.max(0, Math.min(totalPhase, (now.getTime()-iqamaAt.getTime()))); }
     const pct = totalPhase>0 ? (elapsed/totalPhase)*100 : 0; el('bar').style.width = pct.toFixed(1)+'%';
     const key = `${name}-${state.phase}`;
+
     if(until<=0){
-      if(lastPhaseKey!==key){
-        if(state.audioEnabled){
-          try{ if(state.phase==='athan'){ audioAthan.currentTime=0; audioAthan.play(); }
-               if(state.phase==='iqama'){ audioIqama.currentTime=0; audioIqama.play(); } }catch(e){}
-        }
+      if(state.audioEnabled){
+        try{
+          if(state.phase==='athan'){ audioAthan.currentTime=0; audioAthan.play(); }
+          if(state.phase==='iqama'){ audioIqama.currentTime=0; audioIqama.play(); }
+        }catch(e){}
       }
-      if(state.phase==='athan'){ state.phase='iqama'; }
-      else if(state.phase==='iqama'){ state.phase='grace'; }
-      else { state.phase='athan'; const _=findNext(); }
+      if(state.phase==='athan'){ state.phase='iqama'; preAlertActive=false; }
+      else if(state.phase==='iqama'){ state.phase='grace'; preAlertActive=false; }
+      else { state.phase='athan'; preAlertActive=false; const _=findNext(); }
     }
     lastPhaseKey=key;
   }, 250);
@@ -368,7 +380,7 @@ function start(){
 
 // ======= CSV & JSON =======
 function parseCSV(text){
-  const lines=text.replace(/\r/g,'').trim().split(/\ن+/);
+  const lines=text.replace(/\r/g,'').trim().split(/\n+/);
   if(lines.length===0) return {};
   const header=lines[0].split(',').map(h=>h.trim().toLowerCase());
   const findIdx=(keys)=>{ for(const k of keys){ const i=header.indexOf(k); if(i!==-1) return i; } return -1; };
@@ -441,20 +453,6 @@ function handleScheduleFile(file){
   reader.readAsText(file);
 }
 
-// ======= الصوت =======
-const audioAthan = el('audioAthan'); const audioIqama = el('audioIqama'); let athanUrl=null, iqamaUrl=null;
-async function loadAudios(){
-  try{
-    const a=await idbGet('ptt_audioAthan'); if(athanUrl){ URL.revokeObjectURL(athanUrl); athanUrl=null; }
-    if(a){ athanUrl=URL.createObjectURL(a); audioAthan.src=athanUrl; state.audioFlags.athan=true; } else { audioAthan.removeAttribute('src'); state.audioFlags.athan=false; }
-    const q=await idbGet('ptt_audioIqama'); if(iqamaUrl){ URL.revokeObjectURL(iqamaUrl); iqamaUrl=null; }
-    if(q){ iqamaUrl=URL.createObjectURL(q); audioIqama.src=iqamaUrl; state.audioFlags.iqama=true; } else { audioIqama.removeAttribute('src'); state.audioFlags.iqama=false; }
-    saveLS('ptt_audioFlags', state.audioFlags);
-  }catch(e){ console.warn('loadAudios failed',e); }
-}
-function enableAudio(){ state.audioEnabled=true; [audioAthan,audioIqama].forEach(a=>{ a.muted=true; a.play().catch(()=>{}).finally(()=>{ a.pause(); a.currentTime=0; a.muted=false; }); }); status('تم تفعيل الصوت'); updateFloatingAudio(); }
-function updateFloatingAudio(){ const fa=el('floatingAudio'); if(!fa) return; if((SCREEN || SCREEN2) && !state.audioEnabled) fa.classList.add('show'); else fa.classList.remove('show'); }
-
 // ======= مزامنة بيانات (جدول/إعدادات) =======
 function pushToCloud({schedule=false, offsets=false, ui=false}={}){
   if(!state.cloud.enabled) { cloudStatus('المزامنة متوقفة'); return Promise.resolve(false); }
@@ -476,11 +474,25 @@ function pushToCloud({schedule=false, offsets=false, ui=false}={}){
       .catch(e=>{ console.warn('push failed',e); cloudStatus('فشل الكتابة: '+(e?.code||e?.message||e)); alert('فشل رفع البيانات إلى السحابة:\n'+(e?.message||e)); return false; });
   }catch(e){
     console.warn('push threw', e);
-    cloudStatus('فشل الكتابة'); alert('فشل رفع البيانات إلى السحابة:\n'+(e?.message||e)); return Promise.resolve(false);
+    cloudStatus('فشل الكتابة'); alert('فشل رفع البيانات إلى السحابة:\n'+(e?.message||e?.code||e)); return Promise.resolve(false);
   }
 }
 
 // ======= رفع الوسائط إلى التخزين =======
+function printErrorDetails(prefix, err){
+  const out = document.getElementById('testOutput');
+  const code = err && err.code || '';
+  const msg  = err && (err.message || err.toString()) || String(err);
+  const line = `${prefix}: ${code || ''} ${msg}`.trim();
+  console.warn(line, err);
+  if(out){
+    out.textContent = (out.textContent? out.textContent+'\n':'') + line;
+    try{
+      const more = JSON.stringify({code:err.code, message:err.message, name:err.name}, null, 2);
+      out.textContent += '\n' + more;
+    }catch{}
+  }
+}
 async function uploadToStorage(file, key){
   try{
     if(!initFirebase()) return null; if(!fb.storage) return null;
@@ -502,7 +514,7 @@ async function uploadToStorage(file, key){
     task.on('state_changed',
       snap => {
         const pct = Math.floor((snap.bytesTransferred / snap.totalBytes) * 100);
-        if(out){ out.textContent = out.textContent.replace(/(\n)?%?\s*التقدم:.*$/,''); out.textContent += `\nالتقدم: ${pct}%`; }
+        if(out){ out.textContent = out.textContent.replace(/(\n)?%?\s*التقدم:.+$/,''); out.textContent += `\nالتقدم: ${pct}%`; }
       },
       err => {
         printErrorDetails('فشل الرفع', err);
@@ -538,7 +550,6 @@ async function uploadToStorage(file, key){
   }
 }
 
-// ======= اختبارات وسائط/تشخيص =======
 async function diagnoseStorage(){
   const out = document.getElementById('testOutput'); if(out){ out.textContent = 'تشخيص التخزين بدأ...\n'; }
   try{
@@ -562,22 +573,26 @@ async function diagnoseStorage(){
       console.log(ok); if(out){ out.textContent += ok + '\n'; }
     }).catch(err => {
       printErrorDetails('❌ الكتابة فشلت', err);
-      let hint = '';
-      const code = err && err.code || '';
-      if(code.includes('unauthenticated')) hint = 'السبب المحتمل: لم يتم تسجيل الدخول. سجّل الدخول ثم أعد المحاولة.';
-      else if(code.includes('unauthorized')) hint = 'السبب المحتمل: قواعد Storage لا تسمح بالكتابة. تأكد من allow write: if request.auth != null ضمن rooms/{room}/**.';
-      else if(code.includes('invalid-argument')) hint = 'تحقق من قيمة storageBucket وأنها اسم البكت (appspot.com) أو اتركه فارغًا.';
-      else if(code.includes('project-not-found') || code.includes('app-not-authorized')) hint = 'تحقق من مفاتيح Firebase (apiKey/authDomain/databaseURL) وأن المشروع صحيح.';
-      else hint = 'تحقق من الشبكة أو كونسول المتصفح لمزيد من التفاصيل.';
-      if(out){ out.textContent += '🔎 تلميح: ' + hint + '\n'; }
     });
   }catch(e){
     printErrorDetails('تشخيص التخزين تعطل', e);
   }
 }
-
 function urlStatusLine(name, url, ok, status){
   return `${ok ? '✅' : '❌'} ${name}: ${url || '(لا يوجد رابط)'}${status ? ' — ' + status : ''}`;
+}
+function buildScreenUrl(which){
+  const params = new URLSearchParams({ screen: String(which), autoplay:'1' });
+  if(state.cloud && state.cloud.enabled){
+    params.set('cloud','1');
+    params.set('room', state.cloud.roomId || 'Media_Office');
+    const c = state.cloud.config || {};
+    if(c.apiKey) params.set('apiKey', c.apiKey);
+    if(c.authDomain) params.set('authDomain', c.authDomain);
+    if(c.databaseURL) params.set('databaseURL', c.databaseURL);
+    if(c.storageBucket) params.set('storageBucket', c.storageBucket);
+  }
+  return location.origin + location.pathname + '?' + params.toString();
 }
 async function testCloudMedia(){
   try{
@@ -590,6 +605,7 @@ async function testCloudMedia(){
     const tests = [
       {k:'athanUrl', label:'رابط الأذان', apply: (u)=>{ if(u) { try{ audioAthan.src = u; }catch{} } }},
       {k:'iqamaUrl', label:'رابط الإقامة', apply: (u)=>{ if(u) { try{ audioIqama.src = u; }catch{} } }},
+      {k:'alertUrl', label:'رابط التنبيه', apply: (u)=>{ if(u) { try{ audioAlert.src = u; }catch{} } }},
       {k:'bgUrl', label:'رابط الخلفية', apply: (u)=>{ if(u) { try{ document.body.style.backgroundImage = `url(${u})`; }catch{} } }},
     ];
     for(const t of tests){
@@ -624,19 +640,18 @@ async function exportWithMedia(){
   try{
     const a = await idbGet('ptt_audioAthan'); if(a) data.media.audioAthan = await blobToDataURL(a);
     const q = await idbGet('ptt_audioIqama'); if(q) data.media.audioIqama = await blobToDataURL(q);
+    const z = await idbGet('ptt_audioAlert'); if(z) data.media.audioAlert = await blobToDataURL(z);
     const bg = await idbGet('ptt_bgImage'); if(bg) data.media.bgImage = await blobToDataURL(bg);
   }catch(e){ console.warn('collect media failed', e); }
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const aTag = document.createElement('a'); aTag.href = url; aTag.download = 'prayer-tracker-backup-with-media.json'; aTag.click(); URL.revokeObjectURL(url);
 }
-
 function exportData(){
   const blob = new Blob([JSON.stringify({schedule:state.schedule, offsets:state.offsets, ui:state.ui}, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = 'prayer-tracker-backup.json'; a.click(); URL.revokeObjectURL(url);
 }
-
 function importDataDialog(){
   const inp = document.createElement('input'); inp.type='file'; inp.accept='.json';
   inp.onchange = e=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=async ()=>{ try{ const data=JSON.parse(r.result);
@@ -646,6 +661,7 @@ function importDataDialog(){
     if(data.media){
       if(data.media.audioAthan){ const b=dataURLtoBlob(data.media.audioAthan); if(b) await idbSet('ptt_audioAthan', b); }
       if(data.media.audioIqama){ const b=dataURLtoBlob(data.media.audioIqama); if(b) await idbSet('ptt_audioIqama', b); }
+      if(data.media.audioAlert){ const b=dataURLtoBlob(data.media.audioAlert); if(b) await idbSet('ptt_audioAlert', b); }
       if(data.media.bgImage){ const b=dataURLtoBlob(data.media.bgImage); if(b) await idbSet('ptt_bgImage', b); }
     }
     await loadAudios(); await loadBgFromStore(); applyTheme(); renderTable(); renderTodayPills(); status('تم استيراد النسخة الاحتياطية');
@@ -653,151 +669,7 @@ function importDataDialog(){
   inp.click();
 }
 
-// ======= واجهة المستخدم =======
-function initControls(){
-  // رفع الجدول
-  el('scheduleFile').addEventListener('change', (e)=>{ const f=e.target.files?.[0]; if(f) handleScheduleFile(f); });
-  const drop = el('dropzone');
-  drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.style.background='rgba(255,255,255,0.08)';});
-  drop.addEventListener('dragleave', e=>{ drop.style.background='rgba(255,255,255,0.04)';});
-  drop.addEventListener('drop', e=>{ e.preventDefault(); drop.style.background='rgba(255,255,255,0.04)'; const f=e.dataTransfer.files?.[0]; if(f) handleScheduleFile(f); });
-
-  // الإقامات والسماح
-  const map = {Fajr:'offFajr', Dhuhr:'offDhuhr', Asr:'offAsr', Maghrib:'offMaghrib', Isha:'offIsha'};
-  for(const p of PRAYERS){ el(map[p]).value = state.offsets[p] ?? 0; }
-  el('graceMin').value = state.ui.graceMin ?? 8;
-
-  // الأصوات
-  el('athanSound').addEventListener('change', async e=>{
-    const f=e.target.files?.[0]; if(!f) return;
-    try{ await idbSet('ptt_audioAthan', f); await loadAudios(); status('تم تعيين صوت الأذان'); if(state.cloud.enabled) await uploadToStorage(f, 'athan'); } catch(err){ alert('تعذّر حفظ/رفع صوت الأذان.'); }
-  });
-  el('iqamaSound').addEventListener('change', async e=>{
-    const f=e.target.files?.[0]; if(!f) return;
-    try{ await idbSet('ptt_audioIqama', f); await loadAudios(); status('تم تعيين صوت الإقامة'); if(state.cloud.enabled) await uploadToStorage(f, 'iqama'); } catch(err){ alert('تعذّر حفظ/رفع صوت الإقامة.'); }
-  });
-  el('testAthan').onclick = ()=>{ if(state.audioEnabled && audioAthan.src) { audioAthan.currentTime=0; audioAthan.play(); } else alert('فعّل الصوت وعيّن ملفًا أولًا.'); };
-  el('testIqama').onclick = ()=>{ if(state.audioEnabled && audioIqama.src) { audioIqama.currentTime=0; audioIqama.play(); } else alert('فعّل الصوت وعيّن ملفًا أولًا.'); };
-  el('clearAthan').onclick = async ()=>{ try{ await idbDelete('ptt_audioAthan'); await loadAudios(); status('تم حذف صوت الأذان'); if(state.cloud.enabled) await fb.db.ref(getRefs().media).update({athanUrl:null}); }catch{} };
-  el('clearIqama').onclick = async ()=>{ try{ await idbDelete('ptt_audioIqama'); await loadAudios(); status('تم حذف صوت الإقامة'); if(state.cloud.enabled) await fb.db.ref(getRefs().media).update({iqamaUrl:null}); }catch{} };
-
-  // الخط والألوان والخلفية
-  el('googleFontUrl').value = state.ui.googleFontUrl || '';
-  el('accent').value = state.ui.colors.accent; el('accent2').value = state.ui.colors.accent2; el('bg').value = state.ui.colors.bg; el('textColor').value = state.ui.colors.text;
-  el('phaseAthanColor').value = state.ui.colors.phaseAthan || '#60a5fa';
-  el('phaseIqamaColor').value = state.ui.colors.phaseIqama || '#fbbf24';
-  el('phaseGraceColor').value = state.ui.colors.phaseGrace || '#a8b3cf';
-  el('bgMode').value = state.ui.bgMode || 'color';
-  el('bgNormal').value = state.ui.colors.bgNormal || '#0b1220';
-  el('bgIqama').value = state.ui.colors.bgIqama || '#1b2a46';
-  el('bgGrace').value = state.ui.colors.bgGrace || '#342a1b';
-  el('bgMode').addEventListener('change', ()=>{ state.ui.bgMode = el('bgMode').value; saveLS('ptt_ui', state.ui); applyTheme(); });
-
-  if(el('bgImage')){
-    el('bgImage').addEventListener('change', async e=>{ const f=e.target.files?.[0]; if(!f) return; try{ await idbSet('ptt_bgImage', f); state.ui.bgMode='image'; saveLS('ptt_ui', state.ui); await loadBgFromStore(); status('تم تعيين الخلفية'); if(state.cloud.enabled) await uploadToStorage(f, 'bg'); } catch(err){ alert('تعذّر حفظ/رفع الخلفية.'); } });
-  }
-  if(el('clearBg')){
-    el('clearBg').onclick = async ()=>{ try{ await idbDelete('ptt_bgImage'); state.ui.bgMode='color'; saveLS('ptt_ui', state.ui); await loadBgFromStore(); applyTheme(); status('تمت إزالة الخلفية'); if(state.cloud.enabled) await fb.db.ref(getRefs().media).update({bgUrl:null}); }catch{} };
-  }
-
-  // الوقت والمنطقة
-  el('timeFormat').value = state.ui.timeFormat || '12'; el('tzOffset').value = state.ui.tzOffset || 0;
-
-  // السحابة
-  el('cloudEnabled').value = state.cloud.enabled ? 'on' : 'off';
-  el('cloudEnabled').addEventListener('change', ()=>{
-    state.cloud.enabled = el('cloudEnabled').value === 'on';
-    saveLS('ptt_cloud', state.cloud);
-    if(state.cloud.enabled){ subscribeCloud(); } else if(fb.unsub){ fb.unsub(); fb.unsub=null; cloudStatus('المزامنة متوقفة'); }
-  });
-  el('roomId').value = state.cloud.roomId || 'Media_Office';
-  const cfg = state.cloud.config||{}; el('fb_apiKey').value = cfg.apiKey||''; el('fb_authDomain').value=cfg.authDomain||''; el('fb_databaseURL').value=cfg.databaseURL||''; el('fb_storageBucket').value=cfg.storageBucket||'';
-
-  el('fbConnect').onclick = ()=>{ state.cloud.config = { apiKey:el('fb_apiKey').value.trim(), authDomain:el('fb_authDomain').value.trim(), databaseURL:el('fb_databaseURL').value.trim(), storageBucket:normalizeBucket(el('fb_storageBucket').value.trim()) }; saveLS('ptt_cloud', state.cloud); if(initFirebase()) cloudStatus('جاهز'); };
-  el('fbLogin').onclick = ()=>{ state.cloud.email = el('fb_email').value.trim(); state.cloud.password = el('fb_password').value; saveLS('ptt_cloud', state.cloud); fbLogin(); };
-  el('fbLogout').onclick = fbLogout;
-  el('fbTest').onclick = ()=>{ if(!initFirebase()) return; try{ const testRef = fb.db.ref(getRefs().base+'/ping'); testRef.set(Date.now()).then(()=> cloudStatus('اتصال قاعدة البيانات OK (كتابة)')).catch(e=> cloudStatus('اتصال القراءة OK — الكتابة فشلت: '+(e?.code||e?.message))); }catch(e){ cloudStatus('فشل الاختبار'); } };
-
-  // أزرار الواجهة
-  el('enableAudioBtn').onclick = enableAudio;
-  el('enableAudioFloating').onclick = enableAudio;
-  el('openScreen').onclick = ()=>{ window.open(buildScreenUrl(1), '_blank'); };
-  el('openScreen2').onclick = ()=>{ window.open(buildScreenUrl(2), '_blank'); };
-  el('copyScreenLink').onclick = async ()=>{ const url = buildScreenUrl(1); await copyToClipboard(url); };
-  el('copyScreen2Link').onclick = async ()=>{ const url = buildScreenUrl(2); await copyToClipboard(url); };
-  el('openSettings').onclick = ()=>{ el('settings').classList.toggle('hidden'); };
-
-  // حفظ
-  el('saveSettings').onclick = ()=>{
-    state.offsets = { Fajr: +el('offFajr').value || 0, Dhuhr: +el('offDhuhr').value || 0, Asr: +el('offAsr').value || 0, Maghrib: +el('offMaghrib').value || 0, Isha: +el('offIsha').value || 0 };
-    saveLS('ptt_offsets', state.offsets);
-    state.ui.googleFontUrl = el('googleFontUrl').value.trim();
-    state.ui.colors = { ...state.ui.colors, accent: el('accent').value, accent2: el('accent2').value, bg: el('bg').value, text: el('textColor').value, phaseAthan: el('phaseAthanColor').value, phaseIqama: el('phaseIqamaColor').value, phaseGrace: el('phaseGraceColor').value, bgNormal: el('bgNormal').value, bgIqama: el('bgIqama').value, bgGrace: el('bgGrace').value };
-    state.ui.timeFormat = el('timeFormat').value;
-    state.ui.tzOffset = parseInt(el('tzOffset').value||'0', 10);
-    state.ui.graceMin = Math.max(0, parseInt(el('graceMin').value||'0', 10));
-    state.cloud.roomId = el('roomId').value.trim() || state.cloud.roomId;
-    saveLS('ptt_ui', state.ui); saveLS('ptt_cloud', state.cloud);
-    applyTheme(); loadBgFromStore(); renderTodayPills(); status('تم حفظ الإعدادات');
-    if(state.cloud.enabled){ pushToCloud({offsets:true, ui:true}); }
-  };
-
-  // نسخ احتياطي / استيراد / إعادة ضبط
-  el('exportData').onclick = exportData;
-  el('exportWithMedia').onclick = exportWithMedia;
-  el('importData').onclick = importDataDialog;
-  el('resetAll').onclick = async ()=>{ if(!confirm('سيتم مسح كل البيانات محليًا (localStorage + IndexedDB). متابعة؟')) return; localStorage.removeItem('ptt_schedule'); localStorage.removeItem('ptt_offsets'); localStorage.removeItem('ptt_audioFlags'); localStorage.removeItem('ptt_ui'); localStorage.removeItem('ptt_cloud'); await idbClear(); location.reload(); };
-
-  // سحابة شاملة
-  const pushAllBtn = el('pushAll'); if(pushAllBtn) pushAllBtn.onclick = ()=> pushToCloud({schedule:true, offsets:true, ui:true});
-  const pullAllBtn = el('pullAll'); if(pullAllBtn) pullAllBtn.onclick = ()=> pullFromCloud();
-
-  // أدوات المطوّر
-  el('runTests').onclick = async()=>{
-    const lines = [];
-    const ok = (name, cond)=> lines.push(`${cond?'✅':'❌'} ${name}`);
-    ok('تحليل 12ص', parseTimeToDate('2025-01-01','12:00 ص').getHours()===0);
-    ok('تحليل 12م', parseTimeToDate('2025-01-01','12:00 م').getHours()===12);
-    ok('تحليل 24h 23:59', parseTimeToDate('2025-01-01','23:59').getHours()===23);
-    ok('تنسيق 12h', fmtClock(new Date('2025-01-01T13:05:00'),'12')==='1:05 م');
-    ok('تنسيق 24h', fmtClock(new Date('2025-01-01T09:07:00'),'24')==='09:07');
-    ok('sanitizeDateKey basic', sanitizeDateKey('2025-08-10]')==='2025-08-10');
-    ok('sanitizeDateKey slashes', sanitizeDateKey(' 2025/08/10 ')==='2025-08-10');
-    const sch = {'2025-08-10]':{Fajr:'04:00 ص'}, x:{Fajr:'04:00 ص'}};
-    const clean = sanitizeScheduleForFirebase(sch);
-    ok('sanitizeScheduleForFirebase', Object.keys(clean).length===1 && clean['2025-08-10']);
-    el('testOutput').textContent = lines.join('\n');
-  };
-
-  el('showUsage').onclick = async()=>{
-    const lsBytes = new Blob([JSON.stringify(localStorage)]).size;
-    const a = await idbGet('ptt_audioAthan');
-    const q = await idbGet('ptt_audioIqama');
-    const b = await idbGet('ptt_bgImage');
-    const idbBytes = (a?.size||0)+(q?.size||0)+(b?.size||0);
-    el('testOutput').textContent = `LocalStorage≈ ${lsBytes} bytes; IndexedDB media≈ ${idbBytes} bytes`;
-  };
-
-  el('fbMediaTest').onclick = testCloudMedia;
-  el('fbDiagStorage').onclick = diagnoseStorage;
-  el('pushMedia').onclick = async ()=>{
-    if(!state.cloud.enabled){ alert('فعّل المزامنة السحابية أولًا.'); return; }
-    if(!initFirebase()) { alert('Firebase غير مهيّأ'); return; }
-    const out = document.getElementById('testOutput'); if(out){ out.textContent = (out.textContent? out.textContent+'\n':'') + 'رفع الوسائط المخزنة محليًا...'; }
-    const files = [ {key:'ptt_audioAthan', name:'athan'}, {key:'ptt_audioIqama', name:'iqama'}, {key:'ptt_bgImage', name:'bg'} ];
-    let any=false;
-    for(const f of files){
-      const blob = await idbGet(f.key);
-      if(blob){ any = true; await uploadToStorage(blob, f.name); }
-    }
-    if(!any){
-      alert('لا توجد وسائط محفوظة محليًا (IDB). ارفع الملفات من الحقول أعلاه أولًا.');
-    }else{
-      alert('اكتمل رفع الوسائط (إن وُجدت). تحقق من النتائج في الأسفل.');
-    }
-  };
-}
-
+// ======= أدوات الواجهة =======
 async function copyToClipboard(text){
   try{
     if(navigator.clipboard && navigator.clipboard.writeText){
@@ -811,42 +683,196 @@ async function copyToClipboard(text){
     alert('تعذّر نسخ الرابط تلقائيًا. انسخه يدويًا:\n' + text);
   }
 }
+function buildUrlFromState(screenWhich){
+  const params = new URLSearchParams({ screen: String(screenWhich), autoplay:'1' });
+  if(state.cloud && state.cloud.enabled){
+    params.set('cloud','1');
+    params.set('room', state.cloud.roomId || 'Media_Office');
+    const c = state.cloud.config || {};
+    if(c.apiKey) params.set('apiKey', c.apiKey);
+    if(c.authDomain) params.set('authDomain', c.authDomain);
+    if(c.databaseURL) params.set('databaseURL', c.databaseURL);
+    if(c.storageBucket) params.set('storageBucket', c.storageBucket);
+  }
+  return location.origin + location.pathname + '?' + params.toString();
+}
+function initControls(){
+  // فتح الشاشتين
+  document.getElementById('openScreen')?.addEventListener('click', ()=> window.open(buildUrlFromState(1), '_blank'));
+  document.getElementById('openScreen2')?.addEventListener('click', ()=> window.open(buildUrlFromState(2), '_blank'));
+  document.getElementById('copyScreenLink')?.addEventListener('click', ()=> copyToClipboard(buildUrlFromState(1)));
+  document.getElementById('copyScreen2Link')?.addEventListener('click', ()=> copyToClipboard(buildUrlFromState(2)));
 
-// ======= إقلاع التطبيق =======
-(async function(){
-  // إعدادات من الرابط
-  (function applyFromUrl(){
-    const p = new URLSearchParams(location.search);
-    const c = (p.get('cloud')||p.get('sync')||'').toLowerCase();
-    if(c && c!=='0' && c!=='false') state.cloud.enabled=true;
-    const room = p.get('room') || p.get('r'); if(room) state.cloud.roomId=room;
-    const cfg = {...(state.cloud.config||{})};
-    const map = { apiKey:['apiKey','fb_apiKey'], authDomain:['authDomain','fb_authDomain'], databaseURL:['databaseURL','fb_databaseURL'], storageBucket:['storageBucket','fb_storageBucket'] };
-    for(const k in map){ for(const key of map[k]){ const v = p.get(key); if(v){ cfg[k]=v; break; } } }
-    if(Object.keys(cfg).length) state.cloud.config=cfg;
-    const email = p.get('email'); const pass = p.get('password') || p.get('pass');
-    if(email && pass){ state.cloud.email=email; state.cloud.password=pass; }
-    localStorage.setItem('ptt_cloud', JSON.stringify(state.cloud));
-  })();
+  // تفعيل الصوت
+  document.getElementById('enableAudioBtn')?.addEventListener('click', enableAudio);
+  document.getElementById('enableAudioFloating')?.addEventListener('click', enableAudio);
 
-  applyTheme();
-  initControls();
-  renderTable(); renderTodayPills();
-  await loadAudios();
-  updateFloatingAudio();
-  start();
+  // رفع الجدول
+  document.getElementById('scheduleFile').addEventListener('change', (e)=>{ const f=e.target.files?.[0]; if(f) handleScheduleFile(f); });
+  const drop = document.getElementById('dropzone');
+  drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.style.background='rgba(255,255,255,0.08)';});
+  drop.addEventListener('dragleave', e=>{ drop.style.background='rgba(255,255,255,0.04)';});
+  drop.addEventListener('drop', e=>{ e.preventDefault(); drop.style.background='rgba(255,255,255,0.04)'; const f=e.dataTransfer.files?.[0]; if(f) handleScheduleFile(f); });
 
-  if((SCREEN || SCREEN2) && AUTO_AUDIO){
-    setTimeout(()=>{ try{ enableAudio(); }catch{} }, 300);
-    setTimeout(()=>{ try{ enableAudio(); }catch{} }, 1500);
+  // الإقامات والسماح
+  const map = {Fajr:'offFajr', Dhuhr:'offDhuhr', Asr:'offAsr', Maghrib:'offMaghrib', Isha:'offIsha'};
+  for(const p of PRAYERS){ document.getElementById(map[p]).value = state.offsets[p] ?? 0; }
+  document.getElementById('graceMin').value = state.ui.graceMin ?? 8;
+  const pre = document.getElementById('preAlertMin'); pre.value = state.ui.alertMin ?? 5; document.getElementById('preAlertMinLabel').textContent = pre.value;
+
+  // الأصوات
+  document.getElementById('athanSound').addEventListener('change', async e=>{
+    const f=e.target.files?.[0]; if(!f) return;
+    try{ await idbSet('ptt_audioAthan', f); await loadAudios(); status('تم تعيين صوت الأذان'); if(state.cloud.enabled) await uploadToStorage(f, 'athan'); } catch(err){ alert('تعذّر حفظ/رفع صوت الأذان.'); }
+  });
+  document.getElementById('iqamaSound').addEventListener('change', async e=>{
+    const f=e.target.files?.[0]; if(!f) return;
+    try{ await idbSet('ptt_audioIqama', f); await loadAudios(); status('تم تعيين صوت الإقامة'); if(state.cloud.enabled) await uploadToStorage(f, 'iqama'); } catch(err){ alert('تعذّر حفظ/رفع صوت الإقامة.'); }
+  });
+  document.getElementById('alertSound').addEventListener('change', async e=>{
+    const f=e.target.files?.[0]; if(!f) return;
+    try{ await idbSet('ptt_audioAlert', f); await loadAudios(); status('تم تعيين صوت التنبيه'); if(state.cloud.enabled) await uploadToStorage(f, 'alert'); } catch(err){ alert('تعذّر حفظ/رفع صوت التنبيه.'); }
+  });
+  document.getElementById('testAthan').onclick = ()=>{ if(state.audioEnabled && audioAthan.src) { audioAthan.currentTime=0; audioAthan.play(); } else alert('فعّل الصوت وعيّن ملفًا أولًا.'); };
+  document.getElementById('testIqama').onclick = ()=>{ if(state.audioEnabled && audioIqama.src) { audioIqama.currentTime=0; audioIqama.play(); } else alert('فعّل الصوت وعيّن ملفًا أولًا.'); };
+  document.getElementById('testAlert').onclick = ()=>{ if(state.audioEnabled && audioAlert.src) { audioAlert.currentTime=0; audioAlert.play(); } else alert('فعّل الصوت وعيّن ملفًا أولًا.'); };
+  document.getElementById('clearAthan').onclick = async ()=>{ try{ await idbDelete('ptt_audioAthan'); await loadAudios(); status('تم حذف صوت الأذان'); if(state.cloud.enabled) await fb.db.ref(getRefs().media).update({athanUrl:null}); }catch{} };
+  document.getElementById('clearIqama').onclick = async ()=>{ try{ await idbDelete('ptt_audioIqama'); await loadAudios(); status('تم حذف صوت الإقامة'); if(state.cloud.enabled) await fb.db.ref(getRefs().media).update({iqamaUrl:null}); }catch{} };
+  document.getElementById('clearAlert').onclick = async ()=>{ try{ await idbDelete('ptt_audioAlert'); await loadAudios(); status('تم حذف صوت التنبيه'); if(state.cloud.enabled) await fb.db.ref(getRefs().media).update({alertUrl:null}); }catch{} };
+
+  // الخط والألوان والخلفية
+  document.getElementById('googleFontUrl').value = state.ui.googleFontUrl || '';
+  document.getElementById('accent').value = state.ui.colors.accent; document.getElementById('accent2').value = state.ui.colors.accent2; document.getElementById('bg').value = state.ui.colors.bg; document.getElementById('textColor').value = state.ui.colors.text;
+  document.getElementById('phaseAthanColor').value = state.ui.colors.phaseAthan || '#60a5fa';
+  document.getElementById('phaseIqamaColor').value = state.ui.colors.phaseIqama || '#fbbf24';
+  document.getElementById('phaseGraceColor').value = state.ui.colors.phaseGrace || '#a8b3cf';
+  document.getElementById('phaseAlertColor').value = state.ui.colors.phaseAlert || '#ef4444';
+  document.getElementById('bgMode').value = state.ui.bgMode || 'color';
+  document.getElementById('bgNormal').value = state.ui.colors.bgNormal || '#0b1220';
+  document.getElementById('bgIqama').value = state.ui.colors.bgIqama || '#1b2a46';
+  document.getElementById('bgGrace').value = state.ui.colors.bgGrace || '#342a1b';
+  document.getElementById('bgAlert').value = state.ui.colors.bgAlert || '#3a1b1b';
+  document.getElementById('bgMode').addEventListener('change', ()=>{ state.ui.bgMode = document.getElementById('bgMode').value; saveLS('ptt_ui', state.ui); applyTheme(); if(state.cloud.enabled){ pushToCloud({ui:true}); } });
+
+  if(document.getElementById('bgImage')){
+    document.getElementById('bgImage').addEventListener('change', async e=>{ const f=e.target.files?.[0]; if(!f) return; try{ await idbSet('ptt_bgImage', f); state.ui.bgMode='image'; saveLS('ptt_ui', state.ui); await loadBgFromStore(); status('تم تعيين الخلفية'); if(state.cloud.enabled) await uploadToStorage(f, 'bg'); } catch(err){ alert('تعذّر حفظ/رفع الخلفية.'); } });
+  }
+  if(document.getElementById('clearBg')){
+    document.getElementById('clearBg').onclick = async ()=>{ try{ await idbDelete('ptt_bgImage'); state.ui.bgMode='color'; saveLS('ptt_ui', state.ui); await loadBgFromStore(); applyTheme(); status('تمت إزالة الخلفية'); if(state.cloud.enabled) await fb.db.ref(getRefs().media).update({bgUrl:null}); }catch{} };
   }
 
-  if(state.cloud.enabled && initFirebase()){
-    const p = new URLSearchParams(location.search);
-    if((p.get('autologin')||'0') !== '0' && state.cloud.email && state.cloud.password){
-      await fbLogin();
+  // الوقت والمنطقة
+  document.getElementById('timeFormat').value = state.ui.timeFormat || '12'; document.getElementById('tzOffset').value = state.ui.tzOffset || 0;
+
+  // السحابة
+  document.getElementById('cloudEnabled').value = state.cloud.enabled ? 'on' : 'off';
+  document.getElementById('cloudEnabled').addEventListener('change', ()=>{
+    state.cloud.enabled = document.getElementById('cloudEnabled').value === 'on';
+    saveLS('ptt_cloud', state.cloud);
+    if(state.cloud.enabled){ subscribeCloud(); } else if(fb.unsub){ fb.unsub(); fb.unsub=null; cloudStatus('المزامنة متوقفة'); }
+  });
+  document.getElementById('roomId').value = state.cloud.roomId || 'Media_Office';
+  const cfg = state.cloud.config||{}; document.getElementById('fb_apiKey').value = cfg.apiKey||''; document.getElementById('fb_authDomain').value=cfg.authDomain||''; document.getElementById('fb_databaseURL').value=cfg.databaseURL||''; document.getElementById('fb_storageBucket').value=cfg.storageBucket||'';
+
+  document.getElementById('fbConnect').onclick = ()=>{ state.cloud.config = { apiKey:document.getElementById('fb_apiKey').value.trim(), authDomain:document.getElementById('fb_authDomain').value.trim(), databaseURL:document.getElementById('fb_databaseURL').value.trim(), storageBucket:normalizeBucket(document.getElementById('fb_storageBucket').value.trim()) }; const room=document.getElementById('roomId').value.trim(); if(room) state.cloud.roomId=room; saveLS('ptt_cloud', state.cloud); if(initFirebase()) cloudStatus('جاهز'); };
+  document.getElementById('fbLogin').onclick = ()=>{ state.cloud.email = document.getElementById('fb_email').value.trim(); state.cloud.password = document.getElementById('fb_password').value; saveLS('ptt_cloud', state.cloud); fbLogin(); };
+  document.getElementById('fbLogout').onclick = fbLogout;
+  document.getElementById('fbTest').onclick = ()=>{ if(!initFirebase()) return; try{ const testRef = fb.db.ref(getRefs().base+'/ping'); testRef.set(Date.now()).then(()=> cloudStatus('اتصال قاعدة البيانات OK (كتابة)')).catch(e=> cloudStatus('اتصال القراءة OK — الكتابة فشلت: '+(e?.code||e?.message))); }catch(e){ cloudStatus('فشل الاختبار'); } };
+
+  // روابط الشاشة والنسخ
+  document.getElementById('openScreen').onclick = ()=>{ window.open(buildScreenUrl(1), '_blank'); };
+  document.getElementById('openScreen2').onclick = ()=>{ window.open(buildScreenUrl(2), '_blank'); };
+  document.getElementById('copyScreenLink').onclick = ()=> copyToClipboard(buildScreenUrl(1));
+  document.getElementById('copyScreen2Link').onclick = ()=> copyToClipboard(buildScreenUrl(2));
+
+  // الحفظ والإرسال
+  document.getElementById('saveSettings').onclick = ()=>{
+    const map = {Fajr:'offFajr', Dhuhr:'offDhuhr', Asr:'offAsr', Maghrib:'offMaghrib', Isha:'offIsha'};
+    for(const p of PRAYERS){ state.offsets[p] = parseInt(document.getElementById(map[p]).value||'0', 10) || 0; }
+    state.ui.graceMin = parseInt(document.getElementById('graceMin').value||'8',10);
+    state.ui.alertMin = parseInt(document.getElementById('preAlertMin').value||'5',10);
+    state.ui.colors.accent = document.getElementById('accent').value;
+    state.ui.colors.accent2 = document.getElementById('accent2').value;
+    state.ui.colors.text = document.getElementById('textColor').value;
+    state.ui.colors.phaseAthan = document.getElementById('phaseAthanColor').value;
+    state.ui.colors.phaseIqama = document.getElementById('phaseIqamaColor').value;
+    state.ui.colors.phaseGrace = document.getElementById('phaseGraceColor').value;
+    state.ui.colors.phaseAlert = document.getElementById('phaseAlertColor').value;
+    state.ui.colors.bg = document.getElementById('bg').value;
+    state.ui.colors.bgNormal = document.getElementById('bgNormal').value;
+    state.ui.colors.bgIqama = document.getElementById('bgIqama').value;
+    state.ui.colors.bgGrace = document.getElementById('bgGrace').value;
+    state.ui.colors.bgAlert = document.getElementById('bgAlert').value;
+    state.ui.bgMode = document.getElementById('bgMode').value;
+    state.ui.timeFormat = document.getElementById('timeFormat').value;
+    state.ui.tzOffset = parseInt(document.getElementById('tzOffset').value||'0',10) || 0;
+    state.ui.googleFontUrl = document.getElementById('googleFontUrl').value.trim();
+    saveLS('ptt_ui', state.ui); saveLS('ptt_offsets', state.offsets);
+    applyTheme(); setPhaseVisuals(); renderTodayPills();
+    status('تم الحفظ');
+    if(state.cloud.enabled) pushToCloud({offsets:true, ui:true});
+  };
+  document.getElementById('pushAll').onclick = ()=> pushToCloud({schedule:true, offsets:true, ui:true});
+  document.getElementById('pullAll').onclick = ()=> pullFromCloud();
+  document.getElementById('pushMedia').onclick = async ()=>{
+    const aa = await idbGet('ptt_audioAthan'); if(aa) await uploadToStorage(aa, 'athan');
+    const iq = await idbGet('ptt_audioIqama'); if(iq) await uploadToStorage(iq, 'iqama');
+    const al = await idbGet('ptt_audioAlert'); if(al) await uploadToStorage(al, 'alert');
+    const bg = await idbGet('ptt_bgImage'); if(bg) await uploadToStorage(bg, 'bg');
+  };
+  document.getElementById('fbMediaTest').onclick = ()=> testCloudMedia();
+  document.getElementById('fbDiagStorage').onclick = ()=> diagnoseStorage();
+  document.getElementById('exportData').onclick = exportData;
+  document.getElementById('exportWithMedia').onclick = exportWithMedia;
+  document.getElementById('importData').onclick = importDataDialog;
+  document.getElementById('resetAll').onclick = async ()=>{ if(!confirm('سيتم مسح كل الإعدادات المحلية. متابعة؟')) return; localStorage.clear(); await idbClear(); location.reload(); };
+  document.getElementById('showUsage').onclick = async ()=>{
+    const a = await idbGet('ptt_audioAthan'); const q = await idbGet('ptt_audioIqama'); const z = await idbGet('ptt_audioAlert'); const bg = await idbGet('ptt_bgImage');
+    const sizes = [a?.size||0,q?.size||0,z?.size||0,bg?.size||0]; const total = sizes.reduce((x,y)=>x+y,0);
+    alert('أحجام الوسائط (بالبايت):\nAthan='+sizes[0]+'\nIqama='+sizes[1]+'\nAlert='+sizes[2]+'\nBG='+sizes[3]+'\nالإجمالي='+total);
+  };
+  document.getElementById('runTests').onclick = ()=>{
+    const out = document.getElementById('testOutput');
+    const ok = (name, good)=> (good?'✅':'❌')+' '+name;
+    const twelveAm = parseTimeToDate('2025-01-01','12:00 ص',0);
+    const twelvePm = parseTimeToDate('2025-01-01','12:00 م',0);
+    const ok12s = twelveAm && twelveAm.getHours()===0 && twelvePm && twelvePm.getHours()===12;
+    const ok24 = parseTimeToDate('2025-01-01','23:59',0)?.getHours()===23;
+    const fmt12 = fmtClock(new Date('2025-01-01T13:05:00'), '12')==='1:05 م';
+    const fmt24 = fmtClock(new Date('2025-01-01T13:05:00'), '24')==='13:05';
+    const san1 = sanitizeDateKey('2025/02/07')==='2025-02-07';
+    const san2 = sanitizeDateKey('2025-02-07')==='2025-02-07';
+    const schOk = !!sanitizeScheduleForFirebase({'2025/02/07':{Fajr:'05:00'}})['2025-02-07'];
+    out.textContent = [ok('تحليل 12ص/12م', ok12s), ok('تحليل 24h 23:59', ok24), ok('تنسيق 12h', fmt12), ok('تنسيق 24h', fmt24), ok('sanitizeDateKey basic', san1), ok('sanitizeDateKey dash', san2), ok('sanitizeScheduleForFirebase', schOk)].join('\n');
+  };
+}
+
+// ======= قراءة المعاملات من الرابط لتهيئة السحابة تلقائيًا =======
+(function initFromURL(){
+  const cloud = qs.get('cloud'); if(cloud==='1'){ state.cloud.enabled = true; }
+  const room = qs.get('room'); if(room) state.cloud.roomId = room;
+  const cfg = state.cloud.config || {};
+  ['apiKey','authDomain','databaseURL','storageBucket'].forEach(k=>{ const v=qs.get(k); if(v) cfg[k]=v; });
+  state.cloud.config = cfg; saveLS('ptt_cloud', state.cloud);
+
+  if(SCREEN || SCREEN2){
+    // وضع شاشة العرض
+    document.body.classList.add('screen');
+    const enableBtn = document.getElementById('enableAudioFloating');
+    if(AUTO_AUDIO){ // محاولة تمكين الصوت تلقائيًا (قد تمنعها المتصفحات)
+      setTimeout(()=>{ try{ enableAudio(); }catch{} }, 300);
     }
-    subscribeCloud();
-    const rb = document.getElementById('roomBadge'); if(rb) rb.textContent = state.cloud.roomId;
   }
 })();
+
+// ======= بدء التشغيل =======
+window.addEventListener('DOMContentLoaded', ()=>{
+  // تطبيق الثيم
+  applyTheme();
+  // تهيئة عناصر التحكم
+  initControls();
+  // بدء العداد
+  start();
+  // تحديث "الآن"
+  setInterval(()=>{ const nowEl=el('now'); if(nowEl) nowEl.textContent = nowString(); }, 1000);
+});
