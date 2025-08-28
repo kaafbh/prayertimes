@@ -1,3 +1,60 @@
+
+
+
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>متابعة مواقيت الصلاة</title>
+  <link id="googleFontLink" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;800&display=swap">
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Firebase (Compat) CDN -->
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js">
+
+
+
+
+
+
+
+
+
+:root{--bg:#0b1220;--card:rgba(255,255,255,.06);--card-strong:rgba(255,255,255,.12);--text:#f7f9fc;--muted:#a8b3cf;--accent:#6ee7b7;--accent-2:#60a5fa;--danger:#f87171;--phase-athan:#60a5fa;--phase-iqama:#fbbf24;--phase-grace:#a8b3cf;--bg-normal:#0b1220;--bg-iqama:#1b2a46;--bg-grace:#342a1b}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--bg) center/cover no-repeat fixed;color:var(--text);font-family:Cairo,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:grid;grid-template-rows:auto 1fr auto;min-height:100vh;direction:rtl;transition:background 240ms ease}
+header{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:16px clamp(12px,3vw,32px);background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,0))}
+.brand{display:flex;gap:12px;align-items:center}.brand .logo{width:40px;height:40px;border-radius:12px;background:var(--card-strong);display:grid;place-items:center;font-weight:800}.brand h1{font-size:clamp(18px,2vw,22px);margin:0;font-weight:700;letter-spacing:.3px}.now{font-size:clamp(12px,2vw,14px);color:var(--muted)}
+.container{display:grid;grid-template-columns:1fr;gap:16px;padding:0 clamp(12px,3vw,32px) 24px}@media(min-width:960px){.container{grid-template-columns:1.2fr .8fr;align-items:start}}
+.card{background:var(--card);border:1px solid rgba(255,255,255,.08);border-radius:20px;backdrop-filter:blur(6px);box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.hero{padding:clamp(16px,4vw,32px);display:grid;gap:16px;place-items:center;text-align:center}.next-title{font-size:clamp(14px,2.4vw,16px);color:var(--muted)}.next-prayer{display:flex;align-items:baseline;justify-content:center;gap:10px}.next-prayer-name{font-size:clamp(28px,6vw,40px);font-weight:800;letter-spacing:.3px}.next-prayer-time{font-size:clamp(16px,4vw,24px);color:var(--accent);font-weight:700}
+.countdown{font-variant-numeric:tabular-nums;font-weight:800;text-align:center;font-size:clamp(28px,8vw,60px);letter-spacing:.5px}.phase{text-align:center;font-size:clamp(16px,3.2vw,28px);font-weight:800;margin-top:-4px;color:var(--muted)}.phase.phase-athan{color:var(--phase-athan)}.phase.phase-iqama{color:var(--phase-iqama)}.phase.phase-grace{color:var(--phase-grace)}
+.progress{height:10px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden;width:min(920px,100%)}.bar{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:min(920px,100%)}@media(min-width:640px){.grid{grid-template-columns:repeat(5,minmax(0,1fr))}}.pill{text-align:center;padding:10px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}.pill .label{color:var(--muted);font-size:12px}.pill .value{font-weight:700;font-variant-numeric:tabular-nums}
+.settings{padding:clamp(12px,2.8vw,20px);display:grid;gap:14px}.settings h2{font-size:18px;margin:0 0 8px}.row{display:grid;gap:10px}@media(min-width:720px){.row{grid-template-columns:1fr 1fr;align-items:end}}.field{display:grid;gap:6px}label{font-size:12px;color:var(--muted)}
+input[type=text],input[type=number],input[type=time],input[type=url],input[type=file],select,textarea{width:100%;padding:10px 12px;background:rgba(255,255,255,.06);color:var(--text);border:1px solid rgba(255,255,255,.14);border-radius:12px;outline:none;font-size:14px}
+input[type=color]{padding:0;height:40px}button{appearance:none;border:none;background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#06221a;padding:10px 14px;font-weight:800;border-radius:12px;cursor:pointer;box-shadow:0 8px 20px rgba(0,0,0,.2)}button.ghost{background:rgba(255,255,255,.06);color:var(--text);border:1px solid rgba(255,255,255,.12)}button.danger{background:var(--danger);color:#fff}
+.small{font-size:12px;color:var(--muted)}table{width:100%;border-collapse:collapse;font-size:13px;direction:rtl}th,td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.08);text-align:start}th{position:sticky;top:0;background:rgba(0,0,0,.25);backdrop-filter:blur(6px)}
+.table-wrap{max-height:260px;overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:12px}footer{padding:10px clamp(12px,3vw,32px) 20px;display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--muted);font-size:12px}
+.stack{display:grid;gap:8px}.toolbar{display:flex;gap:8px;flex-wrap:wrap}.dropzone{border:1.5px dashed rgba(255,255,255,.35);border-radius:12px;padding:14px;text-align:center;background:rgba(255,255,255,.04)}.hidden{display:none!important}details{background:rgba(255,255,255,.04);padding:10px;border-radius:12px;border:1px solid rgba(255,255,255,.08)}summary{cursor:pointer}pre{white-space:pre-wrap;word-break:break-word;background:rgba(0,0,0,.35);padding:8px;border-radius:8px}
+body.screen header,body.screen footer{display:none}body.screen .container{grid-template-columns:1fr;padding:20px}body.screen #settings{display:none}body.screen .hero{min-height:calc(100vh - 40px);display:grid;align-content:center;gap:24px}body.screen .next-prayer-name{font-size:clamp(36px,8vw,72px)}body.screen .countdown{font-size:clamp(40px,12vw,120px)}body.screen .next-prayer-time{font-size:clamp(18px,4vw,28px)}
+.floating-audio{position:fixed;inset-inline-start:16px;inset-block-end:16px;z-index:1000;display:none}body.screen .floating-audio.show{display:block}
+/* Screen 2 (2304x540 banner) — compact vertical spacing */
+body.screen2 header,body.screen2 footer,body.screen2 #settings{display:none}
+body.screen2 .container{grid-template-columns:1fr;padding:0 8px}
+body.screen2 .hero{min-height:100vh;display:grid;align-content:center;gap:2px;padding:0 6px}
+body.screen2 .next-title{display:none}
+body.screen2 #todayGrid{display:none}
+body.screen2 .next-prayer{gap:10px;margin:0;align-items:center}
+body.screen2 .next-prayer-name{font-size:clamp(40px,8.2vw,118px);margin:0;line-height:1.02}
+body.screen2 .next-prayer-time{font-size:clamp(18px,4.4vw,46px);margin:0;line-height:1.02}
+body.screen2 .countdown{font-size:clamp(48px,9.8vw,158px);margin:0;line-height:1.0}
+body.screen2 .phase{font-size:clamp(20px,3.8vw,46px);margin:0;line-height:1.02}
+body.screen2 .progress{height:8px;width:100%;margin:0}
+body.screen2 .floating-audio.show{display:block}
+
+
 // ======= ثوابت ومساعدات عامة =======
 const PRAYERS = ["Fajr","Dhuhr","Asr","Maghrib","Isha"];
 const DISPLAY = {Fajr:"الفجر", Dhuhr:"الظهر", Asr:"العصر", Maghrib:"المغرب", Isha:"العشاء"};
@@ -849,3 +906,31 @@ async function copyToClipboard(text){
     const rb = document.getElementById('roomBadge'); if(rb) rb.textContent = state.cloud.roomId;
   }
 })();
+
+
+
+    function get(id){ return document.getElementById(id).textContent; }
+    const files = {
+      'index.html': get('file-index.html'),
+      'styles.css': get('file-styles.css'),
+      'app.js': get('file-app.js')
+    };
+
+    document.getElementById('preview').textContent = Object.keys(files).join('\n');
+
+    document.getElementById('buildZip').onclick = async ()=>{
+      try{
+        document.getElementById('status').textContent = 'يتم إنشاء الحزمة...';
+        const zip = new JSZip();
+        for(const [name,content] of Object.entries(files)){
+          zip.file(name, content);
+        }
+        const blob = await zip.generateAsync({type:'blob'});
+        saveAs(blob, 'prayer-times-tracker-v5.zip');
+        document.getElementById('status').textContent = 'تم إنشاء الحزمة وتنزيلها.';
+      }catch(e){
+        document.getElementById('status').textContent = 'فشل إنشاء الحزمة: ' + (e && (e.message||e));
+        console.error(e);
+      }
+    };
+  
