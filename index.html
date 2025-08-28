@@ -9,8 +9,18 @@
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css" />
   <!-- Firebase (Compat) -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script>
+    // إظهار أخطاء الجافاسكربت على الشاشة بدل الصفحة البيضاء
+    window.addEventListener('error', function (e) {
+      const box = document.getElementById('fatalBox');
+      if (box) {
+        box.style.display = 'block';
+        box.innerText = 'حدث خطأ: ' + (e.message || 'غير معروف');
+      }
+    });
+  </script>
 </head>
 <body>
   <main class="container">
@@ -49,9 +59,7 @@
               <th>الإقامة</th>
             </tr>
           </thead>
-          <tbody id="todayTable">
-            <!-- Filled by JS -->
-          </tbody>
+          <tbody id="todayTable"></tbody>
         </table>
       </div>
 
@@ -85,21 +93,26 @@
           <details class="mt">
             <summary>اتصال قاعدة البيانات</summary>
             <div class="small">
-              يتم قراءة المواقيت تلقائيًا من قاعدة <b>Firebase Realtime Database</b>.
+              يتم قراءة المواقيت تلقائيًا من <b>Firebase Realtime Database</b>.<br>
               المسار الافتراضي: <code>/prayerTimes/YYYY-MM-DD</code>.<br>
-              المفاتيح المتوقعة (بتنسيق 24 ساعة HH:MM):<br>
-              <code>fajr_adhan, fajr_iqama, dhuhr_adhan, dhuhr_iqama, asr_adhan, asr_iqama, maghrib_adhan, maghrib_iqama, isha_adhan, isha_iqama</code>.
+              المفاتيح: <code>fajr_adhan, fajr_iqama, dhuhr_adhan, dhuhr_iqama, asr_adhan, asr_iqama, maghrib_adhan, maghrib_iqama, isha_adhan, isha_iqama</code>.
             </div>
           </details>
         </div>
       </div>
     </section>
 
+    <div id="fatalBox" class="fatal" style="display:none"></div>
+
     <footer class="foot">
       <div id="footMosque">—</div>
     </footer>
   </main>
 
-  <script src="./app.js" type="module"></script>
+  <noscript>
+    <div class="fatal">هذا التطبيق يحتاج JavaScript ليعمل.</div>
+  </noscript>
+
+  <script defer src="./app.js"></script>
 </body>
 </html>
